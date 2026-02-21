@@ -21,13 +21,13 @@ _LOGGER = logging.getLogger(__name__)
 class ErovinietaAPI:
     TOKEN_VALIDITY_SECONDS = 3600  # Durata de valabilitate a token-ului în secunde
 
-    def __init__(self, username, password):
+    def __init__(self, username: str, password: str) -> None:
         """Inițializează API-ul Erovinieta."""
         self.username = username
         self.password = password
         self.session = requests.Session()
-        self.token = None
-        self.token_acquired_time = None
+        self.token: str | None = None
+        self.token_acquired_time: datetime | None = None
 
     # -------------------------------------------------------------------------
     #                 Autentificare
@@ -39,13 +39,13 @@ class ErovinietaAPI:
         elapsed_time = (datetime.now() - self.token_acquired_time).total_seconds()
         return elapsed_time < self.TOKEN_VALIDITY_SECONDS - 60
 
-    def authenticate(self):
+    def authenticate(self) -> None:
         """Autentifică utilizatorul și stochează cookie-ul JSESSIONID."""
         _LOGGER.debug("Inițiem procesul de autentificare pentru utilizatorul %s", self.username)
         payload = {
             "username": self.username,
             "password": self.password,
-            "_spring_security_remember_me": "on"
+            "_spring_security_remember_me": "on",
         }
 
         self.session.cookies.clear()
@@ -74,7 +74,7 @@ class ErovinietaAPI:
     # -------------------------------------------------------------------------
     #                 Metodă de bază pentru cererile HTTP
     # -------------------------------------------------------------------------
-    def _request(self, method, url, payload=None, headers=None, reauth=True):
+    def _request(self, method: str, url: str, payload=None, headers=None, reauth: bool = True):
         """Execută o cerere HTTP cu verificarea autentificării."""
         if not self.is_authenticated():
             _LOGGER.info("Token inexistent sau expirat. Autentificare în curs...")
@@ -95,16 +95,18 @@ class ErovinietaAPI:
 
         return resp_data
 
-    def _do_request(self, method, url, payload=None, headers=None):
+    def _do_request(self, method: str, url: str, payload=None, headers=None):
         """Execută cererea HTTP."""
         if headers is None:
             headers = {}
         if self.token:
-            self.session.cookies.set("JSESSIONID", self.token, path='/')
+            self.session.cookies.set("JSESSIONID", self.token, path="/")
 
         _LOGGER.debug("Cerere HTTP [%s] către %s, payload=%s", method, url, payload)
         try:
-            response = self.session.request(method, url, json=payload, headers=headers, timeout=10)
+            response = self.session.request(
+                method, url, json=payload, headers=headers, timeout=10
+            )
         except requests.RequestException as e:
             _LOGGER.error("Cerere HTTP eșuată: %s", e)
             return None, None, str(e)
@@ -112,7 +114,10 @@ class ErovinietaAPI:
         try:
             data = response.json()
         except JSONDecodeError:
-            _LOGGER.error("Răspunsul de la server nu este JSON valid. Răspuns text: %s", response.text)
+            _LOGGER.error(
+                "Răspunsul de la server nu este JSON valid. Răspuns text: %s",
+                response.text,
+            )
             data = None
 
         return data, response.status_code, response.text
@@ -120,7 +125,7 @@ class ErovinietaAPI:
     # -------------------------------------------------------------------------
     #                 Metode Helper
     # -------------------------------------------------------------------------
-    def _generate_timestamp_url(self, base_url, is_first_param=True):
+    def _generate_timestamp_url(self, base_url: str, is_first_param: bool = True) -> str:
         """Adaugă timestamp la URL."""
         timestamp = int(datetime.now().timestamp() * 1000)
         separator = "?" if is_first_param else "&"
@@ -135,7 +140,7 @@ class ErovinietaAPI:
         _LOGGER.debug("Cerere către URL-ul utilizator: %s", url)
         return self._request("GET", url)
 
-    def get_paginated_data(self, limit=20, page=0):
+    def get_paginated_data(self, limit: int = 20, page: int = 0):
         """Obține date paginate."""
         base_url = f"{URL_GET_PAGINATED}?limit={limit}&page={page}"
         url = self._generate_timestamp_url(base_url, is_first_param=False)
@@ -147,19 +152,21 @@ class ErovinietaAPI:
         _LOGGER.debug("Cerere către URL-ul țărilor: %s", URL_GET_COUNTRIES)
         return self._request("GET", URL_GET_COUNTRIES)
 
-    def get_tranzactii(self, date_from, date_to):
+    def get_tranzactii(self, date_from: int, date_to: int):
         """Obține lista de tranzacții."""
         url = URL_TRANZACTII.format(dateFrom=date_from, dateTo=date_to)
         _LOGGER.debug("Cerere către URL-ul tranzacțiilor: %s", url)
         return self._request("GET", url)
 
-    def get_detalii_tranzactie(self, series):
+    def get_detalii_tranzactie(self, series: str):
         """Obține detalii pentru o tranzacție."""
         url = URL_DETALII_TRANZACTIE.format(series=series)
         _LOGGER.debug("Cerere către URL-ul detaliilor tranzacției: %s", url)
         return self._request("GET", url)
 
-    def get_treceri_pod(self, vin, plate_no, certificate_series, period=4):
+    def get_treceri_pod(
+        self, vin: str, plate_no: str, certificate_series: str, period: int = 4
+    ):
         """Obține istoricul trecerilor de pod."""
         url = URL_TRECERI_POD
         payload = {
@@ -169,7 +176,7 @@ class ErovinietaAPI:
             "vehicleFleetEntity": {
                 "certificateSeries": certificate_series,
                 "plateNo": plate_no,
-                "vin": vin
+                "vin": vin,
             },
             "period": period,
         }
