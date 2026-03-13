@@ -4,7 +4,6 @@
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
 [![GitHub Release](https://img.shields.io/github/v/release/cnecrea/erovinieta)](https://github.com/cnecrea/erovinieta/releases)
 ![Total descărcări pentru toate versiunile](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/cnecrea/erovinieta/main/statistici/shields/descarcari.json)
-![Descărcări pentru ultima versiune](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/cnecrea/erovinieta/main/statistici/shields/ultima_release.json)
 
 
 Această integrare pentru Home Assistant oferă **monitorizare completă** pentru utilizatorii eRovinieta, permițându-le să verifice starea rovinietei, să monitorizeze trecerile de pod, tranzacțiile realizate și alte informații importante, direct din aplicația Home Assistant. 🚀
