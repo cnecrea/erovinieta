@@ -1,174 +1,198 @@
-"""Manager API pentru integrarea CNAIR eRovinieta."""
+"""Manager API async pentru integrarea CNAIR eRovinieta.
 
-import requests
+Folosește aiohttp pentru apeluri HTTP native async,
+eliminând necesitatea async_add_executor_job.
+"""
+
+from __future__ import annotations
+
 import logging
-from datetime import datetime, timedelta
-from json.decoder import JSONDecodeError
+import time
+
+import aiohttp
+from yarl import URL
 
 from .const import (
-    URL_LOGIN,
-    URL_GET_USER_DATA,
-    URL_GET_PAGINATED,
-    URL_GET_COUNTRIES,
-    URL_TRANZACTII,
+    TOKEN_VALIDITY_SECONDS,
     URL_DETALII_TRANZACTIE,
+    URL_GET_COUNTRIES,
+    URL_GET_PAGINATED,
+    URL_GET_USER_DATA,
+    URL_LOGIN,
+    URL_TRANZACTII,
     URL_TRECERI_POD,
+)
+from .exceptions import (
+    ErovinietaApiError,
+    ErovinietaAuthError,
+    ErovinietaConnectionError,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
 
 class ErovinietaAPI:
-    TOKEN_VALIDITY_SECONDS = 3600  # Durata de valabilitate a token-ului în secunde
+    """Client API async pentru serviciul CNAIR eRovinieta."""
 
-    def __init__(self, username: str, password: str) -> None:
-        """Inițializează API-ul Erovinieta."""
-        self.username = username
-        self.password = password
-        self.session = requests.Session()
-        self.token: str | None = None
-        self.token_acquired_time: datetime | None = None
+    def __init__(
+        self,
+        session: aiohttp.ClientSession,
+        username: str,
+        password: str,
+    ) -> None:
+        """Inițializează clientul API."""
+        self._session = session
+        self._username = username
+        self._password = password
+        self._token_time: float = 0
 
-    # -------------------------------------------------------------------------
-    #                 Autentificare
-    # -------------------------------------------------------------------------
-    def is_authenticated(self) -> bool:
-        """Verifică dacă token-ul este valid și nu a expirat."""
-        if self.token is None or self.token_acquired_time is None:
-            return False
-        elapsed_time = (datetime.now() - self.token_acquired_time).total_seconds()
-        return elapsed_time < self.TOKEN_VALIDITY_SECONDS - 60
+    @property
+    def authenticated(self) -> bool:
+        """Verifică dacă sesiunea curentă este validă."""
+        return (time.monotonic() - self._token_time) < TOKEN_VALIDITY_SECONDS
 
-    def authenticate(self) -> None:
+    # ------------------------------------------------------------------
+    #  Autentificare
+    # ------------------------------------------------------------------
+
+    async def authenticate(self) -> None:
         """Autentifică utilizatorul și stochează cookie-ul JSESSIONID."""
-        _LOGGER.debug("Inițiem procesul de autentificare pentru utilizatorul %s", self.username)
         payload = {
-            "username": self.username,
-            "password": self.password,
+            "username": self._username,
+            "password": self._password,
             "_spring_security_remember_me": "on",
         }
-
-        self.session.cookies.clear()
-
-        try:
-            response = self.session.post(URL_LOGIN, json=payload, timeout=10)
-            _LOGGER.debug("Răspuns la autentificare: %s", response.text)
-            response.raise_for_status()
-        except requests.RequestException as e:
-            _LOGGER.error("Cerere de autentificare eșuată: %s", e)
-            self.token = None
-            self.token_acquired_time = None
-            raise Exception("Autentificare eșuată.") from e
-
-        if response.status_code == 200:
-            self.token = self.session.cookies.get("JSESSIONID")
-            if not self.token:
-                _LOGGER.error("JSESSIONID nu a fost găsit în cookie-uri.")
-                raise Exception("Autentificare eșuată: JSESSIONID lipsă.")
-            self.token_acquired_time = datetime.now()
-            _LOGGER.info("Autentificarea a reușit pentru %s", self.username)
-        else:
-            _LOGGER.error("Eroare la autentificare: %s", response.text)
-            raise Exception("Autentificare eșuată.")
-
-    # -------------------------------------------------------------------------
-    #                 Metodă de bază pentru cererile HTTP
-    # -------------------------------------------------------------------------
-    def _request(self, method: str, url: str, payload=None, headers=None, reauth: bool = True):
-        """Execută o cerere HTTP cu verificarea autentificării."""
-        if not self.is_authenticated():
-            _LOGGER.info("Token inexistent sau expirat. Autentificare în curs...")
-            self.authenticate()
-
-        resp_data, status_code, resp_text = self._do_request(method, url, payload, headers)
-
-        if (status_code in [401, 403] or resp_data is None) and reauth:
-            _LOGGER.info("Token expirat sau răspuns gol. Reîncercăm autentificarea...")
-            self.authenticate()
-            resp_data, status_code, resp_text = self._do_request(method, url, payload, headers)
-
-        if status_code != 200 or resp_data is None:
-            _LOGGER.error(
-                "Eroare API: [%s] %s. Răspuns gol sau invalid.", status_code, resp_text
-            )
-            raise Exception(f"Eroare API: {status_code}, răspuns gol sau invalid.")
-
-        return resp_data
-
-    def _do_request(self, method: str, url: str, payload=None, headers=None):
-        """Execută cererea HTTP."""
-        if headers is None:
-            headers = {}
-        if self.token:
-            self.session.cookies.set("JSESSIONID", self.token, path="/")
-
-        _LOGGER.debug("Cerere HTTP [%s] către %s, payload=%s", method, url, payload)
-        try:
-            response = self.session.request(
-                method, url, json=payload, headers=headers, timeout=10
-            )
-        except requests.RequestException as e:
-            _LOGGER.error("Cerere HTTP eșuată: %s", e)
-            return None, None, str(e)
+        self._session.cookie_jar.clear()
 
         try:
-            data = response.json()
-        except JSONDecodeError:
-            _LOGGER.error(
-                "Răspunsul de la server nu este JSON valid. Răspuns text: %s",
-                response.text,
+            async with self._session.post(URL_LOGIN, json=payload) as resp:
+                if resp.status != 200:
+                    text = await resp.text()
+                    raise ErovinietaAuthError(
+                        f"Autentificare eșuată (HTTP {resp.status}): {text[:200]}"
+                    )
+        except aiohttp.ClientError as err:
+            raise ErovinietaConnectionError(
+                f"Eroare de conexiune la autentificare: {err}"
+            ) from err
+
+        # Verificăm că JSESSIONID a fost setat de server
+        cookies = self._session.cookie_jar.filter_cookies(URL(URL_LOGIN))
+        if "JSESSIONID" not in cookies:
+            raise ErovinietaAuthError(
+                "Cookie-ul JSESSIONID nu a fost primit după autentificare."
             )
-            data = None
 
-        return data, response.status_code, response.text
+        self._token_time = time.monotonic()
+        _LOGGER.debug("Autentificare reușită pentru %s", self._username)
 
-    # -------------------------------------------------------------------------
-    #                 Metode Helper
-    # -------------------------------------------------------------------------
-    def _generate_timestamp_url(self, base_url: str, is_first_param: bool = True) -> str:
-        """Adaugă timestamp la URL."""
-        timestamp = int(datetime.now().timestamp() * 1000)
-        separator = "?" if is_first_param else "&"
-        return f"{base_url}{separator}timestamp={timestamp}"
+    # ------------------------------------------------------------------
+    #  Cereri HTTP
+    # ------------------------------------------------------------------
 
-    # -------------------------------------------------------------------------
-    #                 Metode Publice (Accesate de integrare)
-    # -------------------------------------------------------------------------
-    def get_user_data(self):
-        """Obține detalii despre utilizator."""
-        url = self._generate_timestamp_url(URL_GET_USER_DATA)
-        _LOGGER.debug("Cerere către URL-ul utilizator: %s", url)
-        return self._request("GET", url)
+    async def _ensure_auth(self) -> None:
+        """Asigură autentificarea înainte de un apel API."""
+        if not self.authenticated:
+            await self.authenticate()
 
-    def get_paginated_data(self, limit: int = 20, page: int = 0):
-        """Obține date paginate."""
-        base_url = f"{URL_GET_PAGINATED}?limit={limit}&page={page}"
-        url = self._generate_timestamp_url(base_url, is_first_param=False)
-        _LOGGER.debug("Cerere către URL-ul paginat: %s", url)
-        return self._request("GET", url)
+    async def _request(
+        self,
+        method: str,
+        url: str,
+        json_data: dict | None = None,
+        headers: dict | None = None,
+    ) -> dict | list:
+        """Execută o cerere HTTP cu re-autentificare automată."""
+        await self._ensure_auth()
 
-    def get_countries(self):
-        """Obține lista țărilor."""
-        _LOGGER.debug("Cerere către URL-ul țărilor: %s", URL_GET_COUNTRIES)
-        return self._request("GET", URL_GET_COUNTRIES)
+        try:
+            return await self._do_request(method, url, json_data, headers)
+        except ErovinietaAuthError:
+            _LOGGER.debug("Token expirat, re-autentificare...")
+            await self.authenticate()
+            return await self._do_request(method, url, json_data, headers)
 
-    def get_tranzactii(self, date_from: int, date_to: int):
-        """Obține lista de tranzacții."""
+    async def _do_request(
+        self,
+        method: str,
+        url: str,
+        json_data: dict | None = None,
+        headers: dict | None = None,
+    ) -> dict | list:
+        """Execută efectiv cererea HTTP."""
+        kwargs: dict = {}
+        if json_data is not None:
+            kwargs["json"] = json_data
+        if headers is not None:
+            kwargs["headers"] = headers
+
+        try:
+            async with self._session.request(method, url, **kwargs) as resp:
+                if resp.status in (401, 403):
+                    raise ErovinietaAuthError(f"HTTP {resp.status}")
+                if resp.status != 200:
+                    text = await resp.text()
+                    raise ErovinietaApiError(
+                        f"Eroare API (HTTP {resp.status}): {text[:200]}"
+                    )
+
+                data = await resp.json(content_type=None)
+                if data is None:
+                    raise ErovinietaApiError("Răspuns JSON gol de la server.")
+                return data
+        except aiohttp.ClientError as err:
+            raise ErovinietaConnectionError(
+                f"Cerere eșuată către {url}: {err}"
+            ) from err
+
+    # ------------------------------------------------------------------
+    #  Helper intern
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _add_timestamp(base_url: str, first_param: bool = True) -> str:
+        """Adaugă un timestamp unic la URL (cache-busting)."""
+        ts = int(time.time() * 1000)
+        sep = "?" if first_param else "&"
+        return f"{base_url}{sep}timestamp={ts}"
+
+    # ------------------------------------------------------------------
+    #  Metode publice API
+    # ------------------------------------------------------------------
+
+    async def get_user_data(self) -> dict:
+        """Obține datele utilizatorului."""
+        url = self._add_timestamp(URL_GET_USER_DATA)
+        return await self._request("GET", url)
+
+    async def get_paginated_data(self, limit: int = 20, page: int = 0) -> dict:
+        """Obține date paginate (vehicule)."""
+        base = f"{URL_GET_PAGINATED}?limit={limit}&page={page}"
+        url = self._add_timestamp(base, first_param=False)
+        return await self._request("GET", url)
+
+    async def get_countries(self) -> list:
+        """Obține lista țărilor disponibile."""
+        return await self._request("GET", URL_GET_COUNTRIES)
+
+    async def get_tranzactii(self, date_from: int, date_to: int) -> dict:
+        """Obține lista de tranzacții într-un interval de timp."""
         url = URL_TRANZACTII.format(dateFrom=date_from, dateTo=date_to)
-        _LOGGER.debug("Cerere către URL-ul tranzacțiilor: %s", url)
-        return self._request("GET", url)
+        return await self._request("GET", url)
 
-    def get_detalii_tranzactie(self, series: str):
-        """Obține detalii pentru o tranzacție."""
+    async def get_detalii_tranzactie(self, series: str) -> dict:
+        """Obține detaliile unei tranzacții specifice."""
         url = URL_DETALII_TRANZACTIE.format(series=series)
-        _LOGGER.debug("Cerere către URL-ul detaliilor tranzacției: %s", url)
-        return self._request("GET", url)
+        return await self._request("GET", url)
 
-    def get_treceri_pod(
-        self, vin: str, plate_no: str, certificate_series: str, period: int = 4
-    ):
-        """Obține istoricul trecerilor de pod."""
-        url = URL_TRECERI_POD
+    async def get_treceri_pod(
+        self,
+        vin: str,
+        plate_no: str,
+        certificate_series: str,
+        period: int = 4,
+    ) -> dict:
+        """Obține istoricul trecerilor de pod pentru un vehicul."""
         payload = {
             "vin": vin,
             "plateNo": plate_no,
@@ -184,5 +208,15 @@ class ErovinietaAPI:
             "Accept": "application/json, text/plain, */*",
             "Content-Type": "application/json;charset=UTF-8",
         }
-        _LOGGER.debug("Cerere către trecerile de pod: %s cu payload: %s", url, payload)
-        return self._request("POST", url, payload=payload, headers=headers)
+        return await self._request(
+            "POST", URL_TRECERI_POD, json_data=payload, headers=headers
+        )
+
+    # ------------------------------------------------------------------
+    #  Lifecycle
+    # ------------------------------------------------------------------
+
+    async def close(self) -> None:
+        """Închide sesiunea HTTP."""
+        if self._session and not self._session.closed:
+            await self._session.close()
