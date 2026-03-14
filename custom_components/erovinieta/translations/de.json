@@ -4,28 +4,49 @@
         "step": {
             "user": {
                 "title": "Anmeldung beim CNAIR eRovinieta-Dienst",
-                "description": "Geben Sie Ihren Benutzernamen und Ihr Passwort ein, um die Integration mit Ihrem eRovinieta-Konto zu verbinden.",
+                "description": "Geben Sie Ihre Zugangsdaten ein, um die Integration mit Ihrem eRovinieta-Konto zu verbinden.",
                 "data": {
-                    "username": "Benutzername",
+                    "username": "Benutzername (E-Mail)",
                     "password": "Passwort",
-                    "update_interval": "Aktualisierungsintervall (Sekunden)",
-                    "istoric_tranzactii": "Transaktionsverlauf (Jahre)"
+                    "update_interval": "Aktualisierungsintervall",
+                    "istoric_tranzactii": "Transaktionsverlauf"
+                }
+            },
+            "reauth_confirm": {
+                "title": "Erneute Authentifizierung CNAIR eRovinieta",
+                "description": "Das Passwort für das Konto **{username}** ist abgelaufen oder wurde geändert. Bitte geben Sie das neue Passwort ein.",
+                "data": {
+                    "password": "Neues Passwort"
+                }
+            },
+            "reconfigure": {
+                "title": "CNAIR eRovinieta neu konfigurieren",
+                "description": "Ändern Sie das Passwort für das Konto **{username}**.",
+                "data": {
+                    "password": "Neues Passwort"
                 }
             }
         },
         "error": {
-            "authentication_failed": "Die Authentifizierung ist fehlgeschlagen. Bitte überprüfen Sie Ihre Eingaben."
+            "authentication_failed": "Die Authentifizierung ist fehlgeschlagen. Bitte überprüfen Sie Ihre Eingaben.",
+            "cannot_connect": "Verbindung zum eRovinieta-Dienst nicht möglich. Bitte überprüfen Sie Ihre Internetverbindung.",
+            "unknown": "Unerwarteter Fehler. Details finden Sie in den Protokollen.",
+            "invalid_update_interval": "Das Aktualisierungsintervall muss zwischen 300 und 86400 Sekunden liegen."
         },
-        "abort": {}
+        "abort": {
+            "already_configured": "Dieses Konto ist bereits konfiguriert.",
+            "reauth_successful": "Erneute Authentifizierung erfolgreich.",
+            "reconfigure_successful": "Neukonfiguration erfolgreich."
+        }
     },
     "options": {
         "step": {
             "init": {
-                "title": "Einstellungen und Optionen für CNAIR eRovinieta",
-                "description": "Konfigurieren Sie das Aktualisierungsintervall und den Transaktionsverlauf.",
+                "title": "CNAIR eRovinieta Optionen",
+                "description": "Konfigurieren Sie das Aktualisierungsintervall und den Zeitraum des Transaktionsverlaufs.",
                 "data": {
-                    "update_interval": "Aktualisierungsintervall (Sekunden)",
-                    "istoric_tranzactii": "Transaktionsverlauf (Jahre)"
+                    "update_interval": "Aktualisierungsintervall",
+                    "istoric_tranzactii": "Transaktionsverlauf"
                 }
             }
         }

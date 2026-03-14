@@ -4,28 +4,49 @@
         "step": {
             "user": {
                 "title": "Autentificare la serviciul CNAIR eRovinieta",
-                "description": "Introduceți numele de utilizator și parola pentru a conecta integrarea la contul dumneavoastră eRovinieta.",
+                "description": "Introduceți datele de autentificare pentru contul dumneavoastră eRovinieta.",
                 "data": {
-                    "username": "Utilizator",
+                    "username": "Utilizator (email)",
                     "password": "Parolă",
-                    "update_interval": "Interval de actualizare (secunde)",
-                    "istoric_tranzactii": "Istoric tranzacții (ani)"
+                    "update_interval": "Interval de actualizare",
+                    "istoric_tranzactii": "Istoric tranzacții"
+                }
+            },
+            "reauth_confirm": {
+                "title": "Re-autentificare CNAIR eRovinieta",
+                "description": "Parola pentru contul **{username}** a expirat sau s-a schimbat. Introduceți noua parolă.",
+                "data": {
+                    "password": "Parolă nouă"
+                }
+            },
+            "reconfigure": {
+                "title": "Reconfigurare CNAIR eRovinieta",
+                "description": "Schimbați parola pentru contul **{username}**.",
+                "data": {
+                    "password": "Parolă nouă"
                 }
             }
         },
         "error": {
-            "authentication_failed": "Autentificarea a eșuat. Verificați datele introduse."
+            "authentication_failed": "Autentificarea a eșuat. Verificați datele introduse.",
+            "cannot_connect": "Nu se poate conecta la serviciul eRovinieta. Verificați conexiunea la internet.",
+            "unknown": "Eroare neașteptată. Consultați jurnalele pentru detalii.",
+            "invalid_update_interval": "Intervalul de actualizare trebuie să fie între 300 și 86400 secunde."
         },
-        "abort": {}
+        "abort": {
+            "already_configured": "Acest cont este deja configurat.",
+            "reauth_successful": "Re-autentificarea a reușit.",
+            "reconfigure_successful": "Reconfigurarea a reușit."
+        }
     },
     "options": {
         "step": {
             "init": {
-                "title": "Setări și opțiuni pentru CNAIR eRovinieta",
-                "description": "Configurați intervalul de actualizare și istoricul de tranzacții.",
+                "title": "Opțiuni CNAIR eRovinieta",
+                "description": "Configurați intervalul de actualizare a datelor și perioada de istoric pentru tranzacții.",
                 "data": {
-                    "update_interval": "Interval de actualizare (secunde)",
-                    "istoric_tranzactii": "Istoric tranzacții (ani)"
+                    "update_interval": "Interval de actualizare",
+                    "istoric_tranzactii": "Istoric tranzacții"
                 }
             }
         }

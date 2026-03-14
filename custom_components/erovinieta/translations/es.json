@@ -4,28 +4,49 @@
         "step": {
             "user": {
                 "title": "Autenticación en el servicio CNAIR eRovinieta",
-                "description": "Introduzca su nombre de usuario y contraseña para conectar la integración con su cuenta eRovinieta.",
+                "description": "Introduzca sus credenciales para conectar la integración con su cuenta eRovinieta.",
                 "data": {
-                    "username": "Usuario",
+                    "username": "Usuario (correo electrónico)",
                     "password": "Contraseña",
-                    "update_interval": "Intervalo de actualización (segundos)",
-                    "istoric_tranzactii": "Historial de transacciones (años)"
+                    "update_interval": "Intervalo de actualización",
+                    "istoric_tranzactii": "Historial de transacciones"
+                }
+            },
+            "reauth_confirm": {
+                "title": "Re-autenticación CNAIR eRovinieta",
+                "description": "La contraseña de la cuenta **{username}** ha expirado o se ha cambiado. Introduzca la nueva contraseña.",
+                "data": {
+                    "password": "Nueva contraseña"
+                }
+            },
+            "reconfigure": {
+                "title": "Reconfigurar CNAIR eRovinieta",
+                "description": "Cambie la contraseña de la cuenta **{username}**.",
+                "data": {
+                    "password": "Nueva contraseña"
                 }
             }
         },
         "error": {
-            "authentication_failed": "La autenticación ha fallado. Verifique los datos ingresados."
+            "authentication_failed": "La autenticación ha fallado. Verifique los datos ingresados.",
+            "cannot_connect": "No se puede conectar al servicio eRovinieta. Verifique su conexión a Internet.",
+            "unknown": "Error inesperado. Consulte los registros para más detalles.",
+            "invalid_update_interval": "El intervalo de actualización debe estar entre 300 y 86400 segundos."
         },
-        "abort": {}
+        "abort": {
+            "already_configured": "Esta cuenta ya está configurada.",
+            "reauth_successful": "Re-autenticación exitosa.",
+            "reconfigure_successful": "Reconfiguración exitosa."
+        }
     },
     "options": {
         "step": {
             "init": {
-                "title": "Configuración y opciones para CNAIR eRovinieta",
-                "description": "Configure el intervalo de actualización y el historial de transacciones.",
+                "title": "Opciones CNAIR eRovinieta",
+                "description": "Configure el intervalo de actualización y el período de historial de transacciones.",
                 "data": {
-                    "update_interval": "Intervalo de actualización (segundos)",
-                    "istoric_tranzactii": "Historial de transacciones (años)"
+                    "update_interval": "Intervalo de actualización",
+                    "istoric_tranzactii": "Historial de transacciones"
                 }
             }
         }

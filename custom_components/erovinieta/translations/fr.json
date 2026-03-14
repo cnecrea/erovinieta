@@ -4,28 +4,49 @@
         "step": {
             "user": {
                 "title": "Connexion au service CNAIR eRovinieta",
-                "description": "Entrez votre nom d'utilisateur et votre mot de passe pour connecter l'intégration à votre compte eRovinieta.",
+                "description": "Entrez vos identifiants pour connecter l'intégration à votre compte eRovinieta.",
                 "data": {
-                    "username": "Nom d'utilisateur",
+                    "username": "Nom d'utilisateur (e-mail)",
                     "password": "Mot de passe",
-                    "update_interval": "Intervalle de mise à jour (secondes)",
-                    "istoric_tranzactii": "Historique des transactions (années)"
+                    "update_interval": "Intervalle de mise à jour",
+                    "istoric_tranzactii": "Historique des transactions"
+                }
+            },
+            "reauth_confirm": {
+                "title": "Ré-authentification CNAIR eRovinieta",
+                "description": "Le mot de passe du compte **{username}** a expiré ou a été modifié. Veuillez entrer le nouveau mot de passe.",
+                "data": {
+                    "password": "Nouveau mot de passe"
+                }
+            },
+            "reconfigure": {
+                "title": "Reconfigurer CNAIR eRovinieta",
+                "description": "Changez le mot de passe du compte **{username}**.",
+                "data": {
+                    "password": "Nouveau mot de passe"
                 }
             }
         },
         "error": {
-            "authentication_failed": "Échec de l'authentification. Veuillez vérifier vos informations."
+            "authentication_failed": "Échec de l'authentification. Veuillez vérifier vos informations.",
+            "cannot_connect": "Impossible de se connecter au service eRovinieta. Vérifiez votre connexion Internet.",
+            "unknown": "Erreur inattendue. Consultez les journaux pour plus de détails.",
+            "invalid_update_interval": "L'intervalle de mise à jour doit être compris entre 300 et 86400 secondes."
         },
-        "abort": {}
+        "abort": {
+            "already_configured": "Ce compte est déjà configuré.",
+            "reauth_successful": "Ré-authentification réussie.",
+            "reconfigure_successful": "Reconfiguration réussie."
+        }
     },
     "options": {
         "step": {
             "init": {
-                "title": "Paramètres et options pour CNAIR eRovinieta",
-                "description": "Configurez l'intervalle de mise à jour et l'historique des transactions.",
+                "title": "Options CNAIR eRovinieta",
+                "description": "Configurez l'intervalle de mise à jour et la période d'historique des transactions.",
                 "data": {
-                    "update_interval": "Intervalle de mise à jour (secondes)",
-                    "istoric_tranzactii": "Historique des transactions (années)"
+                    "update_interval": "Intervalle de mise à jour",
+                    "istoric_tranzactii": "Historique des transactions"
                 }
             }
         }
