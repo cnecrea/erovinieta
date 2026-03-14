@@ -1,9 +1,22 @@
 ![logo](https://github.com/user-attachments/assets/8d4b31d0-f312-4465-8216-3c5cc43dad20)
 
 # CNAIR eRovinieta - Integrare pentru Home Assistant 🏠🇷🇴
+
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
 [![GitHub Release](https://img.shields.io/github/v/release/cnecrea/erovinieta)](https://github.com/cnecrea/erovinieta/releases)
-![Total descărcări pentru toate versiunile](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/cnecrea/erovinieta/main/statistici/shields/descarcari.json)
+[![Licență](https://img.shields.io/github/license/cnecrea/erovinieta)](https://github.com/cnecrea/erovinieta/blob/main/LICENSE.md)
+[![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2025.11%2B-41BDF5?logo=homeassistant&logoColor=white)](https://www.home-assistant.io/)
+[![GitHub Stars](https://img.shields.io/github/stars/cnecrea/erovinieta?style=flat&logo=github)](https://github.com/cnecrea/erovinieta/stargazers)
+[![GitHub Forks](https://img.shields.io/github/forks/cnecrea/erovinieta?style=flat&logo=github)](https://github.com/cnecrea/erovinieta/network/members)
+[![GitHub Watchers](https://img.shields.io/github/watchers/cnecrea/erovinieta?style=flat&logo=github)](https://github.com/cnecrea/erovinieta/watchers)
+[![GitHub Issues](https://img.shields.io/github/issues/cnecrea/erovinieta)](https://github.com/cnecrea/erovinieta/issues)
+[![Ultimul Commit](https://img.shields.io/github/last-commit/cnecrea/erovinieta)](https://github.com/cnecrea/erovinieta/commits/main)
+[![Commit-uri/lună](https://img.shields.io/github/commit-activity/m/cnecrea/erovinieta)](https://github.com/cnecrea/erovinieta/commits/main)
+[![Dimensiune Repo](https://img.shields.io/github/repo-size/cnecrea/erovinieta)](https://github.com/cnecrea/erovinieta)
+[![Limbaj Principal](https://img.shields.io/github/languages/top/cnecrea/erovinieta)](https://github.com/cnecrea/erovinieta)
+[![Total descărcări](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/cnecrea/erovinieta/main/statistici/shields/descarcari.json)](https://github.com/cnecrea/erovinieta/releases)
+[![Descărcări ultima versiune](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/cnecrea/erovinieta/main/statistici/shields/ultima_release.json)](https://github.com/cnecrea/erovinieta/releases/latest)
+![Badge](https://hitscounter.dev/api/hit?url=https%3A%2F%2Fgithub.com%2Fcnecrea%2Ferovinieta&label=vizitatori&icon=github&color=%23198754&message=&style=flat&tz=Europe%2FBucharest)
 
 
 Această integrare pentru Home Assistant oferă **monitorizare completă** pentru utilizatorii eRovinieta, permițându-le să verifice starea rovinietei, să monitorizeze trecerile de pod, tranzacțiile realizate și alte informații importante, direct din aplicația Home Assistant. 🚀
