@@ -1,13 +1,23 @@
-"""Platforma sensor pentru integrarea CNAIR eRovinieta."""
+"""Platforma sensor pentru integrarea CNAIR eRovinieta.
+
+Senzori disponibili:
+- DateUtilizatorSensor: date cont utilizator
+- VehiculSensor: stare rovinietă per vehicul
+- PlataTreceriPodSensor: restanțe treceri pod per vehicul
+- TreceriPodSensor: istoric treceri pod per vehicul
+- SoldSensor: sold peaje neexpirate per vehicul
+- RaportTranzactiiSensor: sumar tranzacții
+"""
+
+from __future__ import annotations
 
 import logging
 import time
-from datetime import datetime
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.device_registry import DeviceEntryType
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -16,10 +26,18 @@ from .const import (
     CONF_ISTORIC_TRANZACTII,
     DOMAIN,
     ISTORIC_TRANZACTII_DEFAULT,
+    MAX_ATTR_TRECERI,
+    VERSION,
 )
 from .coordinator import ErovinietaCoordinator
+from .helpers import capitalize_name, format_timestamp_ms, safe_get, sanitize_plate_no
 
 _LOGGER = logging.getLogger(__name__)
+
+
+# =====================================================================
+#  Setup
+# =====================================================================
 
 
 async def async_setup_entry(
@@ -27,130 +45,64 @@ async def async_setup_entry(
     config_entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Configurează entitățile senzorului pe baza unei intrări de configurare."""
-    coordinator: ErovinietaCoordinator = hass.data[DOMAIN][config_entry.entry_id][
-        "coordinator"
-    ]
-
-    sensors: list[SensorEntity] = []
-    _LOGGER.debug(
-        "Începem configurarea senzorilor pentru entry_id: %s", config_entry.entry_id
-    )
+    """Configurează senzorii pe baza unei intrări de configurare."""
+    coordinator: ErovinietaCoordinator = hass.data[DOMAIN][config_entry.entry_id]
 
     if not coordinator.data:
-        _LOGGER.error(
-            "Datele de la coordinator sunt indisponibile. Nu se pot crea senzori."
-        )
+        _LOGGER.error("Nu există date de la coordinator. Senzorii nu pot fi creați.")
         return
 
-    # Senzor pentru utilizator
-    try:
-        sensors.append(DateUtilizatorSensor(coordinator, config_entry))
-        _LOGGER.debug("Senzor DateUtilizatorSensor creat cu succes.")
-    except Exception as e:
-        _LOGGER.error("Eroare la crearea senzorului DateUtilizatorSensor: %s", e)
+    sensors: list[SensorEntity] = []
 
-    # Senzori pentru vehicule
-    paginated_data = coordinator.data.get("paginated_data", {}).get("view", [])
-    if paginated_data:
-        _LOGGER.debug("Găsite %d vehicule în datele paginate.", len(paginated_data))
-        for vehicul in paginated_data:
-            plate_no = vehicul.get("entity", {}).get("plateNo", "Necunoscut")
-            try:
-                vin = vehicul.get("entity", {}).get("vin", "Necunoscut")
-                certificate_series = vehicul.get("entity", {}).get(
-                    "certificateSeries", "Necunoscut"
-                )
+    # Senzor utilizator
+    sensors.append(DateUtilizatorSensor(coordinator, config_entry))
 
-                if not vin or not plate_no or not certificate_series:
-                    _LOGGER.warning(
-                        "Vehicul cu date incomplete: VIN=%s, PlateNo=%s, CertificateSeries=%s",
-                        vin,
-                        plate_no,
-                        certificate_series,
-                    )
-                    continue
+    # Senzori per vehicul
+    paginated = coordinator.data.get("paginated_data", {}).get("view", [])
+    for vehicul in paginated:
+        entity = vehicul.get("entity", {})
+        plate_no = entity.get("plateNo")
+        vin = entity.get("vin")
+        cert = entity.get("certificateSeries")
 
-                sensors.append(VehiculSensor(coordinator, config_entry, vehicul))
-                _LOGGER.debug(
-                    "Senzor VehiculSensor creat pentru vehiculul cu număr: %s",
-                    plate_no,
-                )
-
-                sensors.append(
-                    PlataTreceriPodSensor(
-                        coordinator,
-                        config_entry,
-                        vin=vin,
-                        plate_no=plate_no,
-                        certificate_series=certificate_series,
-                    )
-                )
-                _LOGGER.debug(
-                    "Senzor PlataTreceriPodSensor creat pentru vehiculul cu număr: %s",
-                    plate_no,
-                )
-
-                sensors.append(
-                    TreceriPodSensor(
-                        coordinator,
-                        config_entry,
-                        vin=vin,
-                        plate_no=plate_no,
-                        certificate_series=certificate_series,
-                    )
-                )
-                _LOGGER.debug(
-                    "Senzor TreceriPodSensor creat pentru vehiculul cu număr: %s",
-                    plate_no,
-                )
-
-                sensors.append(SoldSensor(coordinator, config_entry, plate_no))
-                _LOGGER.debug(
-                    "Senzor SoldSensor creat pentru vehiculul cu număr: %s", plate_no
-                )
-
-            except Exception as e:
-                _LOGGER.error(
-                    "Eroare la crearea senzorilor pentru vehiculul %s: %s",
-                    plate_no,
-                    e,
-                )
-    else:
-        _LOGGER.warning("Nu au fost găsite vehicule în datele paginate.")
-
-    # Senzor pentru raport tranzacții
-    tranzactii_data = coordinator.data.get("transactions", [])
-    if tranzactii_data:
-        _LOGGER.debug(
-            "Găsite %d tranzacții în datele disponibile.", len(tranzactii_data)
-        )
-        try:
-            sensors.append(RaportTranzactiiSensor(coordinator, config_entry))
-            _LOGGER.debug("Senzor RaportTranzactiiSensor creat cu succes.")
-        except Exception as e:
-            _LOGGER.error(
-                "Eroare la crearea senzorului RaportTranzactiiSensor: %s", e
+        if not all([plate_no, vin, cert]):
+            _LOGGER.warning(
+                "Date incomplete pentru vehicul: PlateNo=%s, VIN=%s", plate_no, vin
             )
-    else:
-        _LOGGER.warning("Nu au fost găsite tranzacții în datele furnizate.")
+            continue
+
+        sensors.extend(
+            [
+                VehiculSensor(coordinator, config_entry, plate_no),
+                PlataTreceriPodSensor(
+                    coordinator, config_entry, vin, plate_no, cert
+                ),
+                TreceriPodSensor(
+                    coordinator, config_entry, vin, plate_no, cert
+                ),
+                SoldSensor(coordinator, config_entry, plate_no),
+            ]
+        )
+
+    # Senzor raport tranzacții
+    if coordinator.data.get("transactions"):
+        sensors.append(RaportTranzactiiSensor(coordinator, config_entry))
 
     if sensors:
         async_add_entities(sensors)
-        _LOGGER.info("Toți senzorii au fost adăugați cu succes.")
-    else:
-        _LOGGER.warning("Nu au fost creați senzori din cauza lipsei datelor relevante.")
+        _LOGGER.info("Au fost adăugați %d senzori eRovinieta.", len(sensors))
 
 
-# -------------------------------------------------------------------
-#                           Baza
-# -------------------------------------------------------------------
+# =====================================================================
+#  Clasa de bază
+# =====================================================================
 
 
-class ErovinietaBaseSensor(CoordinatorEntity, SensorEntity):
-    """Clasa de bază pentru senzorii Erovinieta."""
+class ErovinietaBaseSensor(CoordinatorEntity[ErovinietaCoordinator], SensorEntity):
+    """Clasa de bază pentru toți senzorii eRovinieta."""
 
     _attr_has_entity_name = True
+    _attr_attribution = ATTRIBUTION
 
     def __init__(
         self,
@@ -167,119 +119,122 @@ class ErovinietaBaseSensor(CoordinatorEntity, SensorEntity):
         self._attr_unique_id = unique_id
         self._attr_icon = icon
 
-        _LOGGER.debug(
-            "Inițializare ErovinietaBaseSensor: name=%s, unique_id=%s",
-            self._attr_name,
-            self._attr_unique_id,
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Informații despre dispozitiv.
+
+        IMPORTANT: Device name = "eRovinieta" → entity_id = sensor.erovinieta_*
+        (HA generează entity_id din slug(device_name) + slug(entity_name))
+        """
+        return DeviceInfo(
+            identifiers={(DOMAIN, self._config_entry.entry_id)},
+            name="eRovinieta",
+            manufacturer="CNAIR",
+            model="eRovinieta",
+            sw_version=VERSION,
+            entry_type=DeviceEntryType.SERVICE,
         )
 
-    @property
-    def device_info(self):
-        """Informații despre dispozitiv pentru integrare."""
-        return {
-            "identifiers": {(DOMAIN, self._config_entry.entry_id)},
-            "name": "CNAIR eRovinieta",
-            "manufacturer": "Ciprian Nicolae (cnecrea)",
-            "model": "CNAIR eRovinieta",
-            "entry_type": DeviceEntryType.SERVICE,
-        }
 
-
-# -------------------------------------------------------------------
-#                     DateUtilizatorSensor
-# -------------------------------------------------------------------
+# =====================================================================
+#  DateUtilizatorSensor
+# =====================================================================
 
 
 class DateUtilizatorSensor(ErovinietaBaseSensor):
-    """Senzor pentru afișarea datelor utilizatorului."""
+    """Senzor cu datele contului utilizatorului."""
 
-    def __init__(self, coordinator: ErovinietaCoordinator, config_entry: ConfigEntry):
-        """Inițializează senzorul DateUtilizatorSensor."""
+    def __init__(
+        self, coordinator: ErovinietaCoordinator, config_entry: ConfigEntry
+    ) -> None:
+        """Inițializare."""
         user_data = coordinator.data.get("user_data", {})
-        utilizator_data = user_data.get("utilizator", {})
-        user_identifier = (
-            utilizator_data.get("nume", "necunoscut").replace(" ", "_").lower()
+        utilizator = user_data.get("utilizator", {})
+        user_id = (
+            utilizator.get("nume", "necunoscut").replace(" ", "_").lower()
         )
 
         super().__init__(
             coordinator=coordinator,
             config_entry=config_entry,
             name="Date utilizator",
-            unique_id=f"{DOMAIN}_date_utilizator_{user_identifier}_{config_entry.entry_id}",
+            unique_id=f"{DOMAIN}_date_utilizator_{user_id}_{config_entry.entry_id}",
             icon="mdi:account-details",
         )
 
     @property
-    def state(self):
-        """Returnează starea senzorului (atribut principal)."""
+    def native_value(self) -> str:
+        """Returnează ID-ul utilizatorului."""
         if not self.coordinator.data or "user_data" not in self.coordinator.data:
             return "nespecificat"
-
         user_data = self.coordinator.data["user_data"]
         user_id = user_data.get("id")
-        return user_id if user_id is not None else "nespecificat"
+        return str(user_id) if user_id is not None else "nespecificat"
 
     @property
-    def extra_state_attributes(self):
-        """Returnează atributele suplimentare."""
+    def extra_state_attributes(self) -> dict:
+        """Atribute suplimentare ale utilizatorului."""
         if not self.coordinator.data or "user_data" not in self.coordinator.data:
             return {}
 
         user_data = self.coordinator.data["user_data"]
-        utilizator_data = user_data.get("utilizator", {})
+        utilizator = user_data.get("utilizator", {})
         tara_data = user_data.get("tara", {})
         denumire_tara = tara_data.get("denumire", "nespecificat")
 
-        def safe_get(data, key, default="nespecificat"):
-            value = data.get(key)
-            return value if value is not None else default
-
-        def capitalize_name(name):
-            return " ".join(word.capitalize() for word in name.split())
-
         if denumire_tara.lower() == "romania":
-            judet = safe_get(user_data.get("judet", {}), "nume")
-            localitate = safe_get(user_data.get("localitate", {}), "nume")
+            judet = safe_get(
+                user_data.get("judet", {}).get("nume"), "nespecificat"
+            )
+            localitate = safe_get(
+                user_data.get("localitate", {}).get("nume"), "nespecificat"
+            )
         else:
-            judet = safe_get(user_data, "judetText")
-            localitate = safe_get(user_data, "localitateText")
+            judet = safe_get(user_data.get("judetText"), "nespecificat")
+            localitate = safe_get(user_data.get("localitateText"), "nespecificat")
 
-        attributes = {
-            "Numele și prenumele": safe_get(utilizator_data, "nume", "").title(),
-            "CNP": safe_get(user_data, "cnpCui"),
-            "Telefon de contact": safe_get(utilizator_data, "telefon"),
-            "Persoană fizică": "Da" if safe_get(user_data, "pf") else "Nu",
-            "Email utilizator": safe_get(utilizator_data, "email"),
-            "Acceptă corespondența": (
-                "Da" if safe_get(user_data, "acceptaCorespondenta") else "Nu"
+        return {
+            "Numele și prenumele": safe_get(
+                utilizator.get("nume"), ""
+            ).title(),
+            "CNP": safe_get(user_data.get("cnpCui"), "nespecificat"),
+            "Telefon de contact": safe_get(
+                utilizator.get("telefon"), "nespecificat"
             ),
-            "Adresa": safe_get(user_data, "adresa"),
+            "Persoană fizică": "Da" if user_data.get("pf") else "Nu",
+            "Email utilizator": safe_get(
+                utilizator.get("email"), "nespecificat"
+            ),
+            "Acceptă corespondența": (
+                "Da" if user_data.get("acceptaCorespondenta") else "Nu"
+            ),
+            "Adresa": safe_get(user_data.get("adresa"), "nespecificat"),
             "Localitate": localitate,
             "Județ": judet,
             "Țară": capitalize_name(denumire_tara),
-            "attribution": ATTRIBUTION,
         }
-        return attributes
 
 
-# -------------------------------------------------------------------
-#                     VehiculSensor
-# -------------------------------------------------------------------
+# =====================================================================
+#  VehiculSensor
+# =====================================================================
 
 
 class VehiculSensor(ErovinietaBaseSensor):
-    """Senzor pentru un vehicul în sistemul e-Rovinietă."""
+    """Senzor pentru starea rovinietei unui vehicul.
+
+    CORECȚIE: Datele vehiculului sunt citite din coordinator la fiecare
+    actualizare (nu mai folosim referință stale din __init__).
+    """
 
     def __init__(
         self,
         coordinator: ErovinietaCoordinator,
         config_entry: ConfigEntry,
-        vehicul_data: dict,
-    ):
-        """Inițializează senzorul pentru un vehicul specific."""
-        plate_no = vehicul_data.get("entity", {}).get("plateNo", "Necunoscut")
-        sanitized = plate_no.replace(" ", "_").lower()
-
+        plate_no: str,
+    ) -> None:
+        """Inițializare cu numărul de înmatriculare."""
+        sanitized = sanitize_plate_no(plate_no)
         super().__init__(
             coordinator=coordinator,
             config_entry=config_entry,
@@ -287,156 +242,94 @@ class VehiculSensor(ErovinietaBaseSensor):
             unique_id=f"{DOMAIN}_vehicul_{sanitized}_{config_entry.entry_id}",
             icon="mdi:car",
         )
+        self._plate_no = plate_no
 
-        self.vehicul_data = vehicul_data
-        self.plate_no = plate_no
+    def _get_vehicle_data(self) -> dict:
+        """Obține datele actuale ale vehiculului din coordinator."""
+        if not self.coordinator.data:
+            return {}
+        for item in self.coordinator.data.get("paginated_data", {}).get("view", []):
+            if item.get("entity", {}).get("plateNo") == self._plate_no:
+                return item
+        return {}
 
     @staticmethod
-    def get_country_name(country_id, countries_data):
+    def _get_country_name(country_id, countries_data: list) -> str:
         """Returnează denumirea țării pe baza ID-ului."""
         if not country_id or not countries_data:
             return "Necunoscut"
         for country in countries_data:
             if country.get("id") == country_id:
-                country_name = country.get("denumire", "Necunoscut")
-                return " ".join(word.capitalize() for word in country_name.split())
+                return capitalize_name(
+                    country.get("denumire", "Necunoscut")
+                )
         return "Necunoscut"
 
-    @staticmethod
-    def format_timestamp(timestamp_millis):
-        """Formatează un timestamp (în milisecunde) în format YYYY-MM-DD HH:MM:SS."""
-        if timestamp_millis:
-            try:
-                dt = datetime.fromtimestamp(timestamp_millis / 1000)
-                return dt.strftime("%Y-%m-%d %H:%M:%S")
-            except (OSError, ValueError):
-                return "Dată invalidă"
-        return ""
-
     @property
-    def state(self):
-        """Returnează dacă vehiculul are rovinietă activă: Da sau Nu."""
-        vignettes_list = self.vehicul_data.get("userDetailsVignettes", [])
-        if not vignettes_list:
+    def native_value(self) -> str:
+        """Returnează 'Da' dacă vehiculul are rovinietă activă, altfel 'Nu'."""
+        vehicle = self._get_vehicle_data()
+        vignettes = vehicle.get("userDetailsVignettes", [])
+        if not vignettes:
             return "Nu"
 
-        vignette = vignettes_list[0]
-        stop_ts = vignette.get("vignetteStopDate")
-        if stop_ts is None:
+        stop_ts = vignettes[0].get("vignetteStopDate")
+        if not stop_ts:
             return "Nu"
 
         now_ms = int(time.time() * 1000)
         return "Da" if stop_ts > now_ms else "Nu"
 
     @property
-    def extra_state_attributes(self):
-        """Returnează atributele suplimentare ale senzorului."""
-        entity = self.vehicul_data.get("entity", {})
-        vignettes_list = self.vehicul_data.get("userDetailsVignettes", [])
+    def extra_state_attributes(self) -> dict:
+        """Atribute suplimentare ale vehiculului și rovinietei."""
+        vehicle = self._get_vehicle_data()
+        entity = vehicle.get("entity", {})
+        vignettes = vehicle.get("userDetailsVignettes", [])
 
-        attributes = {
+        countries = self.coordinator.data.get("countries_data", [])
+
+        attrs = {
             "Număr de înmatriculare": entity.get("plateNo", "Necunoscut"),
             "VIN": entity.get("vin", "Necunoscut"),
-            "Seria certificatului": entity.get("certificateSeries", "Necunoscut"),
-            "Țara": self.get_country_name(
-                entity.get("tara"),
-                self.coordinator.data.get("countries_data", []),
+            "Seria certificatului": entity.get(
+                "certificateSeries", "Necunoscut"
             ),
-            "attribution": ATTRIBUTION,
+            "Țara": self._get_country_name(entity.get("tara"), countries),
         }
 
-        if not vignettes_list:
-            attributes["Rovinietă"] = "Nu există rovinietă"
+        if not vignettes:
+            attrs["Rovinietă"] = "Nu există rovinietă"
         else:
-            vignette = vignettes_list[0]
-            start_ts = vignette.get("vignetteStartDate")
-            stop_ts = vignette.get("vignetteStopDate")
+            v = vignettes[0]
+            start_ts = v.get("vignetteStartDate")
+            stop_ts = v.get("vignetteStopDate")
 
-            start_date_str = self.format_timestamp(start_ts)
-            stop_date_str = self.format_timestamp(stop_ts)
-
-            zile_ramase = None
-            if stop_ts:
-                now_seconds = int(time.time())
-                stop_seconds = stop_ts // 1000
-                days_diff = (stop_seconds - now_seconds) // 86400
-                zile_ramase = days_diff
-
-            attributes["Categorie vignietă"] = vignette.get(
+            attrs["Categorie vignietă"] = v.get(
                 "vignetteCategory", "Necunoscut"
             )
-            attributes["Data început vignietă"] = start_date_str
-            attributes["Data sfârșit vignietă"] = stop_date_str
-            attributes["Expiră peste (zile)"] = (
-                zile_ramase if zile_ramase is not None else "N/A"
-            )
+            attrs["Data început vignietă"] = format_timestamp_ms(start_ts)
+            attrs["Data sfârșit vignietă"] = format_timestamp_ms(stop_ts)
 
-        return attributes
+            if stop_ts and stop_ts > 0:
+                now_s = int(time.time())
+                days_left = (stop_ts // 1000 - now_s) // 86400
+                attrs["Expiră peste (zile)"] = days_left
+            else:
+                attrs["Expiră peste (zile)"] = "N/A"
 
-
-# -------------------------------------------------------------------
-#                     Senzor RaportTranzactiiSensor
-# -------------------------------------------------------------------
-
-
-class RaportTranzactiiSensor(ErovinietaBaseSensor):
-    """Senzor pentru afișarea raportului tranzacțiilor."""
-
-    def __init__(self, coordinator: ErovinietaCoordinator, config_entry: ConfigEntry):
-        """Inițializează senzorul RaportTranzactiiSensor."""
-        user_data = coordinator.data.get("user_data", {})
-        utilizator_data = user_data.get("utilizator", {})
-        user_identifier = (
-            utilizator_data.get("nume", "necunoscut").replace(" ", "_").lower()
-        )
-
-        super().__init__(
-            coordinator=coordinator,
-            config_entry=config_entry,
-            name="Raport tranzacții",
-            unique_id=f"{DOMAIN}_raport_tranzactii_{user_identifier}_{config_entry.entry_id}",
-            icon="mdi:chart-bar-stacked",
-        )
-
-    @property
-    def state(self):
-        """Returnează numărul total al tranzacțiilor realizate."""
-        tranzactii_data = self.coordinator.data.get("transactions", [])
-        return len(tranzactii_data)
-
-    @property
-    def extra_state_attributes(self):
-        """Returnează atributele suplimentare simplificate."""
-        tranzactii_data = self.coordinator.data.get("transactions", [])
-        total_sum = sum(
-            float(item.get("valoareTotalaCuTva", 0))
-            for item in tranzactii_data
-            if isinstance(item, dict)
-        )
-
-        years_analyzed = self._config_entry.options.get(
-            CONF_ISTORIC_TRANZACTII, ISTORIC_TRANZACTII_DEFAULT
-        )
-        attributes = {
-            "Perioadă analizată": f"Ultimii {years_analyzed} ani",
-            "Număr facturi": len(tranzactii_data),
-            "Suma totală plătită": f"{total_sum:.2f} RON",
-            "attribution": ATTRIBUTION,
-        }
-        return attributes
+        return attrs
 
 
-# -------------------------------------------------------------------
-#             Senzor PlataTreceriPodSensor - restanțe
-# -------------------------------------------------------------------
+# =====================================================================
+#  PlataTreceriPodSensor — restanțe
+# =====================================================================
 
 
 class PlataTreceriPodSensor(ErovinietaBaseSensor):
-    """Senzor pentru verificarea plăților pentru treceri de pod (restanțe).
+    """Senzor pentru restanțe treceri pod (neplătite în ultimele 24h).
 
-    CORECȚIE CRITICĂ: Filtrarea se face acum per vehicul (vin + plate_no),
-    nu la nivel de cont. Anterior, orice trecere neplătită de oricare vehicul
-    din cont seta „Da" pentru TOATE vehiculele.
+    Filtrarea se face per vehicul (vin + plate_no).
     """
 
     def __init__(
@@ -446,9 +339,9 @@ class PlataTreceriPodSensor(ErovinietaBaseSensor):
         vin: str,
         plate_no: str,
         certificate_series: str,
-    ):
-        """Inițializează senzorul PlataTreceriPodSensor."""
-        sanitized = plate_no.replace(" ", "_").lower()
+    ) -> None:
+        """Inițializare."""
+        sanitized = sanitize_plate_no(plate_no)
         super().__init__(
             coordinator=coordinator,
             config_entry=config_entry,
@@ -456,96 +349,88 @@ class PlataTreceriPodSensor(ErovinietaBaseSensor):
             unique_id=f"{DOMAIN}_plata_treceri_pod_{sanitized}_{config_entry.entry_id}",
             icon="mdi:invoice-text-remove",
         )
-        self.vin = vin
-        self.plate_no = plate_no
-        self.certificate_series = certificate_series
+        self._vin = vin
+        self._plate_no = plate_no
+        self._certificate_series = certificate_series
 
     def _get_vehicle_detections(self) -> list:
-        """Returnează lista de detecții DOAR pentru acest vehicul.
-
-        Folosește dicționarul per-vehicul din coordinator dacă e disponibil,
-        cu fallback pe filtrare din lista consolidată.
-        """
-        # Preferăm dicționarul per-vehicul (mai eficient, fără ambiguitate)
+        """Returnează detecțiile pentru acest vehicul."""
+        if not self.coordinator.data:
+            return []
         per_vehicul = self.coordinator.data.get("treceri_pod_per_vehicul", {})
-        if per_vehicul and self.plate_no in per_vehicul:
-            return per_vehicul[self.plate_no]
+        if self._plate_no in per_vehicul:
+            return per_vehicul[self._plate_no]
+        return []
 
-        # Fallback: filtrare din lista consolidată
+    def _get_unpaid_detections(self) -> list:
+        """Returnează detecțiile neplătite din ultimele 24h."""
+        detections = self._get_vehicle_detections()
+        now_ms = int(time.time() * 1000)
+        interval_ms = 24 * 60 * 60 * 1000  # 24 ore
+
         return [
-            detection
-            for detection in self.coordinator.data.get("detectionList", [])
-            if detection.get("vin") == self.vin
-            and detection.get("plateNo") == self.plate_no
+            d
+            for d in detections
+            if d.get("paymentStatus") is None
+            and now_ms - d.get("detectionTimestamp", 0) <= interval_ms
         ]
 
     @property
-    def state(self):
-        """Returnează starea principală: Da sau Nu (există restanțe pentru ACEST vehicul?)."""
-        detection_list = self._get_vehicle_detections()
-        now = int(datetime.now().timestamp() * 1000)
-        interval_ms = 24 * 60 * 60 * 1000  # 24 ore în milisecunde
-
-        neplatite = [
-            detection
-            for detection in detection_list
-            if detection.get("paymentStatus") is None
-            and now - detection.get("detectionTimestamp", 0) <= interval_ms
-        ]
-        return "Da" if len(neplatite) > 0 else "Nu"
+    def native_value(self) -> str:
+        """'Da' dacă există restanțe, altfel 'Nu'."""
+        return "Da" if self._get_unpaid_detections() else "Nu"
 
     @property
-    def extra_state_attributes(self):
-        """Returnează detalii despre trecerile neplătite (restanțe) pentru ACEST vehicul."""
-        detection_list = self._get_vehicle_detections()
-        now = int(datetime.now().timestamp() * 1000)
-        interval_ms = 24 * 60 * 60 * 1000
+    def extra_state_attributes(self) -> dict:
+        """Detalii restanțe (limitate la MAX_ATTR_TRECERI)."""
+        neplatite = self._get_unpaid_detections()
+        total = len(neplatite)
 
-        neplatite = [
-            detection
-            for detection in detection_list
-            if detection.get("paymentStatus") is None
-            and now - detection.get("detectionTimestamp", 0) <= interval_ms
-        ]
+        # Sortăm descrescător și limităm
+        neplatite_sorted = sorted(
+            neplatite,
+            key=lambda d: d.get("detectionTimestamp", 0),
+            reverse=True,
+        )
+        limited = neplatite_sorted[:MAX_ATTR_TRECERI]
 
-        attributes = {
-            "Număr treceri neplătite": len(neplatite),
-            "Număr de înmatriculare": self.plate_no,
-            "VIN": self.vin,
-            "Seria certificatului": self.certificate_series,
+        attrs: dict = {
+            "Număr treceri neplătite": total,
+            "Număr de înmatriculare": self._plate_no,
+            "VIN": self._vin,
+            "Seria certificatului": self._certificate_series,
         }
 
-        def safe_get(value, default=""):
-            return value if value is not None else default
-
-        for idx, detection in enumerate(neplatite, start=1):
-            timestamp = detection.get("detectionTimestamp")
-            formatted_time = (
-                datetime.fromtimestamp(timestamp / 1000).strftime("%Y-%m-%d %H:%M:%S")
-                if timestamp
-                else ""
+        if total > MAX_ATTR_TRECERI:
+            attrs["Avertisment"] = (
+                f"Se afișează doar cele mai recente {MAX_ATTR_TRECERI} "
+                f"din {total} restanțe."
             )
-            attributes[f"--- Restanțe pentru trecerea de pod #{idx}"] = "\n"
-            attributes[f"Trecere {idx} - Categorie"] = safe_get(
-                detection.get("detectionCategory")
+
+        for idx, detection in enumerate(limited, start=1):
+            ts = detection.get("detectionTimestamp")
+            attrs[f"--- Restanță #{idx}"] = ""
+            attrs[f"Trecere {idx} - Categorie"] = safe_get(
+                detection.get("detectionCategory"), ""
             )
-            attributes[f"Trecere {idx} - Timp detectare"] = formatted_time
-            attributes[f"Trecere {idx} - Direcție"] = safe_get(
-                detection.get("direction")
+            attrs[f"Trecere {idx} - Timp detectare"] = format_timestamp_ms(ts)
+            attrs[f"Trecere {idx} - Direcție"] = safe_get(
+                detection.get("direction"), ""
             )
-            attributes[f"Trecere {idx} - Bandă"] = safe_get(detection.get("lane"))
+            attrs[f"Trecere {idx} - Bandă"] = safe_get(
+                detection.get("lane"), ""
+            )
 
-        attributes["attribution"] = ATTRIBUTION
-        return attributes
+        return attrs
 
 
-# -------------------------------------------------------------------
-#                Senzor TreceriPodSensor - istoric
-# -------------------------------------------------------------------
+# =====================================================================
+#  TreceriPodSensor — istoric
+# =====================================================================
 
 
 class TreceriPodSensor(ErovinietaBaseSensor):
-    """Senzor pentru afișarea istoriei trecerilor de pod."""
+    """Senzor pentru istoricul complet al trecerilor de pod."""
 
     def __init__(
         self,
@@ -554,9 +439,9 @@ class TreceriPodSensor(ErovinietaBaseSensor):
         vin: str,
         plate_no: str,
         certificate_series: str,
-    ):
-        """Inițializează senzorul TreceriPodSensor."""
-        sanitized = plate_no.replace(" ", "_").lower()
+    ) -> None:
+        """Inițializare."""
+        sanitized = sanitize_plate_no(plate_no)
         super().__init__(
             coordinator=coordinator,
             config_entry=config_entry,
@@ -564,104 +449,104 @@ class TreceriPodSensor(ErovinietaBaseSensor):
             unique_id=f"{DOMAIN}_treceri_pod_{sanitized}_{config_entry.entry_id}",
             icon="mdi:bridge",
         )
-        self.vin = vin
-        self.plate_no = plate_no
-        self.certificate_series = certificate_series
+        self._vin = vin
+        self._plate_no = plate_no
+        self._certificate_series = certificate_series
 
     def _get_vehicle_detections(self) -> list:
-        """Returnează lista de detecții DOAR pentru acest vehicul."""
+        """Returnează detecțiile pentru acest vehicul."""
+        if not self.coordinator.data:
+            return []
         per_vehicul = self.coordinator.data.get("treceri_pod_per_vehicul", {})
-        if per_vehicul and self.plate_no in per_vehicul:
-            return per_vehicul[self.plate_no]
-
-        return [
-            detection
-            for detection in self.coordinator.data.get("detectionList", [])
-            if detection.get("vin") == self.vin
-            and detection.get("plateNo") == self.plate_no
-        ]
+        if self._plate_no in per_vehicul:
+            return per_vehicul[self._plate_no]
+        return []
 
     @property
-    def state(self):
-        """Returnează numărul total al trecerilor pentru vehicul."""
+    def native_value(self) -> int:
+        """Numărul total de treceri."""
         return len(self._get_vehicle_detections())
 
     @property
-    def extra_state_attributes(self):
-        """Returnează detalii suplimentare despre treceri."""
+    def extra_state_attributes(self) -> dict:
+        """Detalii treceri (limitate la MAX_ATTR_TRECERI, cele mai recente)."""
         detection_list = self._get_vehicle_detections()
+        total = len(detection_list)
 
-        attributes = {
-            "Număr total treceri": len(detection_list),
-            "Număr de înmatriculare": self.plate_no,
-            "VIN": self.vin,
-            "Seria certificatului": self.certificate_series,
+        sorted_detections = sorted(
+            detection_list,
+            key=lambda d: d.get("detectionTimestamp", 0),
+            reverse=True,
+        )
+        limited = sorted_detections[:MAX_ATTR_TRECERI]
+
+        attrs: dict = {
+            "Număr total treceri": total,
+            "Treceri afișate": len(limited),
+            "Număr de înmatriculare": self._plate_no,
+            "VIN": self._vin,
+            "Seria certificatului": self._certificate_series,
         }
 
-        for idx, detection in enumerate(detection_list, start=1):
-            timestamp = detection.get("detectionTimestamp")
-            formatted_time = (
-                datetime.fromtimestamp(timestamp / 1000).strftime("%Y-%m-%d %H:%M:%S")
-                if timestamp
-                else ""
-            )
-            attributes[f"--- Detalii privind trecerea de pod #{idx}"] = "\n"
-            attributes[f"Trecere {idx} - Categorie"] = (
-                detection.get("detectionCategory") or ""
-            )
-            attributes[f"Trecere {idx} - Timp detectare"] = formatted_time
-            attributes[f"Trecere {idx} - Direcție"] = (
-                detection.get("direction") or ""
-            )
-            attributes[f"Trecere {idx} - Bandă"] = detection.get("lane") or ""
-            attributes[f"Trecere {idx} - Valoare (RON)"] = (
-                detection.get("value") or ""
-            )
-            attributes[f"Trecere {idx} - Partener"] = (
-                detection.get("partner") or ""
-            )
-            attributes[f"Trecere {idx} - Metodă plată"] = (
-                detection.get("paymentMethod") or ""
-            )
-            attributes[f"Trecere {idx} - Vehicul"] = (
-                detection.get("paymentPlateNo") or ""
-            )
-            attributes[f"Trecere {idx} - Treceri achiziționate"] = (
-                detection.get("taxName") or ""
-            )
-            valid_until_timestamp = detection.get("validUntilTimestamp")
-            formatted_valid_until = (
-                datetime.fromtimestamp(valid_until_timestamp / 1000).strftime(
-                    "%Y-%m-%d %H:%M:%S"
-                )
-                if valid_until_timestamp
-                else ""
-            )
-            attributes[f"Trecere {idx} - Valabilitate până la"] = (
-                formatted_valid_until
+        if total > MAX_ATTR_TRECERI:
+            attrs["Avertisment"] = (
+                f"Se afișează doar cele mai recente {MAX_ATTR_TRECERI} "
+                f"din {total} treceri."
             )
 
-        attributes["attribution"] = ATTRIBUTION
-        return attributes
+        for idx, detection in enumerate(limited, start=1):
+            ts = detection.get("detectionTimestamp")
+            valid_until = detection.get("validUntilTimestamp")
+
+            attrs[f"--- Trecere #{idx}"] = ""
+            attrs[f"Trecere {idx} - Categorie"] = safe_get(
+                detection.get("detectionCategory"), ""
+            )
+            attrs[f"Trecere {idx} - Timp detectare"] = format_timestamp_ms(ts)
+            attrs[f"Trecere {idx} - Direcție"] = safe_get(
+                detection.get("direction"), ""
+            )
+            attrs[f"Trecere {idx} - Bandă"] = safe_get(
+                detection.get("lane"), ""
+            )
+            attrs[f"Trecere {idx} - Valoare (RON)"] = safe_get(
+                detection.get("value"), ""
+            )
+            attrs[f"Trecere {idx} - Partener"] = safe_get(
+                detection.get("partner"), ""
+            )
+            attrs[f"Trecere {idx} - Metodă plată"] = safe_get(
+                detection.get("paymentMethod"), ""
+            )
+            attrs[f"Trecere {idx} - Vehicul"] = safe_get(
+                detection.get("paymentPlateNo"), ""
+            )
+            attrs[f"Trecere {idx} - Treceri achiziționate"] = safe_get(
+                detection.get("taxName"), ""
+            )
+            attrs[f"Trecere {idx} - Valabilitate până la"] = (
+                format_timestamp_ms(valid_until)
+            )
+
+        return attrs
 
 
-# -------------------------------------------------------------------
-#                Senzor SoldSensor
-# -------------------------------------------------------------------
+# =====================================================================
+#  SoldSensor
+# =====================================================================
 
 
 class SoldSensor(ErovinietaBaseSensor):
-    """Senzor pentru afișarea soldului 'soldPeajeNeexpirate'."""
+    """Senzor pentru soldul peajelor neexpirate."""
 
     def __init__(
         self,
         coordinator: ErovinietaCoordinator,
         config_entry: ConfigEntry,
         plate_no: str,
-    ):
-        """Inițializează senzorul SoldSensor."""
-        sanitized = plate_no.replace(" ", "_").lower()
-
+    ) -> None:
+        """Inițializare."""
+        sanitized = sanitize_plate_no(plate_no)
         super().__init__(
             coordinator=coordinator,
             config_entry=config_entry,
@@ -669,46 +554,85 @@ class SoldSensor(ErovinietaBaseSensor):
             unique_id=f"{DOMAIN}_sold_peaje_neexpirate_{sanitized}_{config_entry.entry_id}",
             icon="mdi:boom-gate",
         )
-        self.plate_no = plate_no
+        self._plate_no = plate_no
 
-    @property
-    def state(self):
-        """Returnează valoarea principală: soldPeajeNeexpirate."""
-        paginated_data = self.coordinator.data.get("paginated_data", {}).get(
-            "view", []
-        )
-        if not paginated_data:
+    def _get_sold(self) -> int | float:
+        """Obține soldul din datele coordinator-ului."""
+        if not self.coordinator.data:
             return 0
-
-        for item in paginated_data:
+        for item in self.coordinator.data.get("paginated_data", {}).get("view", []):
             entity = item.get("entity", {})
-            if entity and entity.get("plateNo") == self.plate_no:
-                detection_payment_sum = item.get("detectionPaymentSum", {})
-                if detection_payment_sum:
-                    return detection_payment_sum.get("soldPeajeNeexpirate", 0)
+            if entity.get("plateNo") == self._plate_no:
+                payment_sum = item.get("detectionPaymentSum", {})
+                if payment_sum:
+                    return payment_sum.get("soldPeajeNeexpirate", 0)
         return 0
 
     @property
-    def extra_state_attributes(self):
-        """Returnează atributele suplimentare ale senzorului."""
-        paginated_data = self.coordinator.data.get("paginated_data", {}).get(
-            "view", []
+    def native_value(self) -> int | float:
+        """Valoarea soldului."""
+        return self._get_sold()
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Atribute suplimentare."""
+        return {
+            "Sold peaje neexpirate": self._get_sold(),
+        }
+
+
+# =====================================================================
+#  RaportTranzactiiSensor
+# =====================================================================
+
+
+class RaportTranzactiiSensor(ErovinietaBaseSensor):
+    """Senzor sumar pentru raportul de tranzacții."""
+
+    def __init__(
+        self, coordinator: ErovinietaCoordinator, config_entry: ConfigEntry
+    ) -> None:
+        """Inițializare."""
+        user_data = coordinator.data.get("user_data", {})
+        utilizator = user_data.get("utilizator", {})
+        user_id = (
+            utilizator.get("nume", "necunoscut").replace(" ", "_").lower()
         )
-        attributes = {"attribution": ATTRIBUTION}
 
-        if not paginated_data:
-            attributes["Sold peaje neexpirate"] = 0
-            return attributes
+        super().__init__(
+            coordinator=coordinator,
+            config_entry=config_entry,
+            name="Raport tranzacții",
+            unique_id=f"{DOMAIN}_raport_tranzactii_{user_id}_{config_entry.entry_id}",
+            icon="mdi:chart-bar-stacked",
+        )
 
-        for item in paginated_data:
-            entity = item.get("entity", {})
-            if entity and entity.get("plateNo") == self.plate_no:
-                detection_payment_sum = item.get("detectionPaymentSum", {})
-                if detection_payment_sum:
-                    attributes["Sold peaje neexpirate"] = (
-                        detection_payment_sum.get("soldPeajeNeexpirate", 0)
-                    )
-                    return attributes
+    @property
+    def native_value(self) -> int:
+        """Numărul total de tranzacții."""
+        if not self.coordinator.data:
+            return 0
+        return len(self.coordinator.data.get("transactions", []))
 
-        attributes["Sold peaje neexpirate"] = 0
-        return attributes
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Sumar tranzacții."""
+        if not self.coordinator.data:
+            return {}
+
+        transactions = self.coordinator.data.get("transactions", [])
+        total_sum = sum(
+            float(item.get("valoareTotalaCuTva", 0))
+            for item in transactions
+            if isinstance(item, dict)
+        )
+
+        years = self._config_entry.options.get(
+            CONF_ISTORIC_TRANZACTII, ISTORIC_TRANZACTII_DEFAULT
+        )
+
+        return {
+            "Perioadă analizată": f"Ultimii {years} ani",
+            "Număr facturi": len(transactions),
+            "Suma totală plătită": f"{total_sum:.2f} RON",
+        }
