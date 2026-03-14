@@ -128,7 +128,7 @@ class ErovinietaBaseSensor(CoordinatorEntity[ErovinietaCoordinator], SensorEntit
         """
         return DeviceInfo(
             identifiers={(DOMAIN, self._config_entry.entry_id)},
-            name="eRovinieta",
+            name="CNAIR eRovinieta",
             manufacturer="CNAIR",
             model="eRovinieta",
             sw_version=VERSION,
