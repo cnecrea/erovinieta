@@ -14,8 +14,6 @@
 [![Commit-uri/lună](https://img.shields.io/github/commit-activity/m/cnecrea/erovinieta)](https://github.com/cnecrea/erovinieta/commits/main)
 [![Dimensiune Repo](https://img.shields.io/github/repo-size/cnecrea/erovinieta)](https://github.com/cnecrea/erovinieta)
 [![Limbaj Principal](https://img.shields.io/github/languages/top/cnecrea/erovinieta)](https://github.com/cnecrea/erovinieta)
-[![Total descărcări](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/cnecrea/erovinieta/main/statistici/shields/descarcari.json)](https://github.com/cnecrea/erovinieta/releases)
-[![Descărcări ultima versiune](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/cnecrea/erovinieta/main/statistici/shields/ultima_release.json)](https://github.com/cnecrea/erovinieta/releases/latest)
 ![Badge](https://hitscounter.dev/api/hit?url=https%3A%2F%2Fgithub.com%2Fcnecrea%2Ferovinieta&label=afi%C8%99%C4%83ri&icon=github&color=%23198754&message=&style=flat&tz=Europe%2FBucharest)
 
 
