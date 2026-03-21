@@ -26,6 +26,7 @@ from .const import (
     CONF_ISTORIC_TRANZACTII,
     DOMAIN,
     ISTORIC_TRANZACTII_DEFAULT,
+    LICENSE_DATA_KEY,
     MAX_ATTR_TRECERI,
     VERSION,
 )
@@ -120,6 +121,12 @@ class ErovinietaBaseSensor(CoordinatorEntity[ErovinietaCoordinator], SensorEntit
         self._attr_icon = icon
 
     @property
+    def _license_valid(self) -> bool:
+        """Verifică dacă licența este validă."""
+        mgr = self.hass.data.get(DOMAIN, {}).get(LICENSE_DATA_KEY)
+        return mgr is not None and mgr.is_valid
+
+    @property
     def device_info(self) -> DeviceInfo:
         """Informații despre dispozitiv.
 
@@ -165,6 +172,8 @@ class DateUtilizatorSensor(ErovinietaBaseSensor):
     @property
     def native_value(self) -> str:
         """Returnează ID-ul utilizatorului."""
+        if not self._license_valid:
+            return "Licență necesară"
         if not self.coordinator.data or "user_data" not in self.coordinator.data:
             return "nespecificat"
         user_data = self.coordinator.data["user_data"]
@@ -174,6 +183,8 @@ class DateUtilizatorSensor(ErovinietaBaseSensor):
     @property
     def extra_state_attributes(self) -> dict:
         """Atribute suplimentare ale utilizatorului."""
+        if not self._license_valid:
+            return {"licență": "necesară"}
         if not self.coordinator.data or "user_data" not in self.coordinator.data:
             return {}
 
@@ -268,6 +279,8 @@ class VehiculSensor(ErovinietaBaseSensor):
     @property
     def native_value(self) -> str:
         """Returnează 'Da' dacă vehiculul are rovinietă activă, altfel 'Nu'."""
+        if not self._license_valid:
+            return "Licență necesară"
         vehicle = self._get_vehicle_data()
         vignettes = vehicle.get("userDetailsVignettes", [])
         if not vignettes:
@@ -283,6 +296,8 @@ class VehiculSensor(ErovinietaBaseSensor):
     @property
     def extra_state_attributes(self) -> dict:
         """Atribute suplimentare ale vehiculului și rovinietei."""
+        if not self._license_valid:
+            return {"licență": "necesară"}
         vehicle = self._get_vehicle_data()
         entity = vehicle.get("entity", {})
         vignettes = vehicle.get("userDetailsVignettes", [])
@@ -378,11 +393,15 @@ class PlataTreceriPodSensor(ErovinietaBaseSensor):
     @property
     def native_value(self) -> str:
         """'Da' dacă există restanțe, altfel 'Nu'."""
+        if not self._license_valid:
+            return "Licență necesară"
         return "Da" if self._get_unpaid_detections() else "Nu"
 
     @property
     def extra_state_attributes(self) -> dict:
         """Detalii restanțe (limitate la MAX_ATTR_TRECERI)."""
+        if not self._license_valid:
+            return {"licență": "necesară"}
         neplatite = self._get_unpaid_detections()
         total = len(neplatite)
 
@@ -463,13 +482,17 @@ class TreceriPodSensor(ErovinietaBaseSensor):
         return []
 
     @property
-    def native_value(self) -> int:
+    def native_value(self) -> int | str:
         """Numărul total de treceri."""
+        if not self._license_valid:
+            return "Licență necesară"
         return len(self._get_vehicle_detections())
 
     @property
     def extra_state_attributes(self) -> dict:
         """Detalii treceri (limitate la MAX_ATTR_TRECERI, cele mai recente)."""
+        if not self._license_valid:
+            return {"licență": "necesară"}
         detection_list = self._get_vehicle_detections()
         total = len(detection_list)
 
@@ -569,13 +592,17 @@ class SoldSensor(ErovinietaBaseSensor):
         return 0
 
     @property
-    def native_value(self) -> int | float:
+    def native_value(self) -> int | float | str:
         """Valoarea soldului."""
+        if not self._license_valid:
+            return "Licență necesară"
         return self._get_sold()
 
     @property
     def extra_state_attributes(self) -> dict:
         """Atribute suplimentare."""
+        if not self._license_valid:
+            return {"licență": "necesară"}
         return {
             "Sold peaje neexpirate": self._get_sold(),
         }
@@ -608,8 +635,10 @@ class RaportTranzactiiSensor(ErovinietaBaseSensor):
         )
 
     @property
-    def native_value(self) -> int:
+    def native_value(self) -> int | str:
         """Numărul total de tranzacții."""
+        if not self._license_valid:
+            return "Licență necesară"
         if not self.coordinator.data:
             return 0
         return len(self.coordinator.data.get("transactions", []))
@@ -617,6 +646,8 @@ class RaportTranzactiiSensor(ErovinietaBaseSensor):
     @property
     def extra_state_attributes(self) -> dict:
         """Sumar tranzacții."""
+        if not self._license_valid:
+            return {"licență": "necesară"}
         if not self.coordinator.data:
             return {}
 
