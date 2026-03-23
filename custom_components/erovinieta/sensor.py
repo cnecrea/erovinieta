@@ -17,6 +17,7 @@ import time
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -34,6 +35,17 @@ from .coordinator import ErovinietaCoordinator
 from .helpers import capitalize_name, format_timestamp_ms, safe_get, sanitize_plate_no
 
 _LOGGER = logging.getLogger(__name__)
+
+
+# =====================================================================
+#  Funcții Helper
+# =====================================================================
+
+
+def _is_license_valid(hass: HomeAssistant) -> bool:
+    """Verifică dacă licența este validă."""
+    mgr = hass.data.get(DOMAIN, {}).get(LICENSE_DATA_KEY)
+    return mgr is not None and mgr.is_valid
 
 
 # =====================================================================
@@ -55,39 +67,73 @@ async def async_setup_entry(
 
     sensors: list[SensorEntity] = []
 
-    # Senzor utilizator
-    sensors.append(DateUtilizatorSensor(coordinator, config_entry))
+    # Verifică validitatea licenței
+    license_valid = _is_license_valid(hass)
 
-    # Senzori per vehicul
-    paginated = coordinator.data.get("paginated_data", {}).get("view", [])
-    for vehicul in paginated:
-        entity = vehicul.get("entity", {})
-        plate_no = entity.get("plateNo")
-        vin = entity.get("vin")
-        cert = entity.get("certificateSeries")
-
-        if not all([plate_no, vin, cert]):
-            _LOGGER.warning(
-                "Date incomplete pentru vehicul: PlateNo=%s, VIN=%s", plate_no, vin
+    if not license_valid:
+        # Curăță senzorii normali orfani din Entity Registry
+        registru = er.async_get(hass)
+        licenta_uid = f"{DOMAIN}_licenta_necesara_{config_entry.entry_id}"
+        for entry_reg in er.async_entries_for_config_entry(
+            registru, config_entry.entry_id
+        ):
+            if (
+                entry_reg.domain == "sensor"
+                and entry_reg.unique_id != licenta_uid
+            ):
+                registru.async_remove(entry_reg.entity_id)
+                _LOGGER.debug(
+                    "[eRovinieta] Senzor orfan eliminat (licență expirată): %s",
+                    entry_reg.entity_id,
+                )
+        # Dacă nu avem licență validă, adaugă doar LicentaNecesaraSensor
+        sensors.append(LicentaNecesaraSensor(coordinator, config_entry))
+    else:
+        # Curăță senzorul de licență orfan (dacă exista anterior)
+        registru = er.async_get(hass)
+        licenta_uid = f"{DOMAIN}_licenta_necesara_{config_entry.entry_id}"
+        entitate_licenta = registru.async_get_entity_id("sensor", DOMAIN, licenta_uid)
+        if entitate_licenta is not None:
+            registru.async_remove(entitate_licenta)
+            _LOGGER.debug(
+                "[eRovinieta] Entitate LicentaNecesaraSensor orfană eliminată: %s",
+                entitate_licenta,
             )
-            continue
 
-        sensors.extend(
-            [
-                VehiculSensor(coordinator, config_entry, plate_no),
-                PlataTreceriPodSensor(
-                    coordinator, config_entry, vin, plate_no, cert
-                ),
-                TreceriPodSensor(
-                    coordinator, config_entry, vin, plate_no, cert
-                ),
-                SoldSensor(coordinator, config_entry, plate_no),
-            ]
-        )
+        # Dacă licența e validă, adaugă toți senzorii normali
+        # Senzor utilizator
+        sensors.append(DateUtilizatorSensor(coordinator, config_entry))
 
-    # Senzor raport tranzacții
-    if coordinator.data.get("transactions"):
-        sensors.append(RaportTranzactiiSensor(coordinator, config_entry))
+        # Senzori per vehicul
+        paginated = coordinator.data.get("paginated_data", {}).get("view", [])
+        for vehicul in paginated:
+            entity = vehicul.get("entity", {})
+            plate_no = entity.get("plateNo")
+            vin = entity.get("vin")
+            cert = entity.get("certificateSeries")
+
+            if not all([plate_no, vin, cert]):
+                _LOGGER.warning(
+                    "Date incomplete pentru vehicul: PlateNo=%s, VIN=%s", plate_no, vin
+                )
+                continue
+
+            sensors.extend(
+                [
+                    VehiculSensor(coordinator, config_entry, plate_no),
+                    PlataTreceriPodSensor(
+                        coordinator, config_entry, vin, plate_no, cert
+                    ),
+                    TreceriPodSensor(
+                        coordinator, config_entry, vin, plate_no, cert
+                    ),
+                    SoldSensor(coordinator, config_entry, plate_no),
+                ]
+            )
+
+        # Senzor raport tranzacții
+        if coordinator.data.get("transactions"):
+            sensors.append(RaportTranzactiiSensor(coordinator, config_entry))
 
     if sensors:
         async_add_entities(sensors)
@@ -141,6 +187,41 @@ class ErovinietaBaseSensor(CoordinatorEntity[ErovinietaCoordinator], SensorEntit
             sw_version=VERSION,
             entry_type=DeviceEntryType.SERVICE,
         )
+
+
+# =====================================================================
+#  LicentaNecesaraSensor
+# =====================================================================
+
+
+class LicentaNecesaraSensor(ErovinietaBaseSensor):
+    """Senzor care afișează mesajul de licență necesară."""
+
+    def __init__(
+        self, coordinator: ErovinietaCoordinator, config_entry: ConfigEntry
+    ) -> None:
+        """Inițializare."""
+        super().__init__(
+            coordinator=coordinator,
+            config_entry=config_entry,
+            name="eRovinieta",
+            unique_id=f"{DOMAIN}_licenta_necesara_{config_entry.entry_id}",
+            icon="mdi:license",
+        )
+
+    @property
+    def native_value(self) -> str:
+        """Returnează mesajul de licență necesară."""
+        return "Licență necesară"
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Atribute suplimentare cu informații despre licență."""
+        return {
+            "status": "Licență necesară",
+            "info": "Pentru a activa senzorii, este necesară o licență validă. Vizitați https://hubinteligent.org pentru mai multe detalii.",
+            "attribution": ATTRIBUTION,
+        }
 
 
 # =====================================================================

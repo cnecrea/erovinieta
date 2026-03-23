@@ -94,7 +94,9 @@ class LicenseManager:
         self._store = Store(hass, STORAGE_VERSION, STORAGE_KEY)
         self._data: dict[str, Any] = {}
         self._fingerprint: str = ""
+        self._hardware_fingerprint: str = ""
         self._loaded = False
+        self._hmac_retry_done = False
         # Token de status primit de la server (cache local)
         self._status_token: dict[str, Any] = {}
 
@@ -108,8 +110,15 @@ class LicenseManager:
     async def async_load(self) -> None:
         """Încarcă datele de licență din storage. Se apelează o singură dată."""
         _LOGGER.debug("[eRovinieta:License] Încep async_load()")
-        stored = await self._store.async_load()
-        self._data = dict(stored) if stored else {}
+        try:
+            stored = await self._store.async_load()
+            self._data = dict(stored) if stored else {}
+        except Exception:  # noqa: BLE001
+            _LOGGER.warning(
+                "[eRovinieta:License] Storage corupt sau ilizibil "
+                "— pornesc cu date goale (serverul va restaura starea)"
+            )
+            self._data = {}
         _LOGGER.debug(
             "[eRovinieta:License] Date din storage: %d chei (%s)",
             len(self._data),
@@ -119,8 +128,13 @@ class LicenseManager:
         self._fingerprint = await self._hass.async_add_executor_job(
             self._generate_fingerprint
         )
+        self._hardware_fingerprint = await self._hass.async_add_executor_job(
+            self._generate_hardware_fingerprint
+        )
         _LOGGER.debug(
-            "[eRovinieta:License] Fingerprint generat: %s...", self._fingerprint[:16]
+            "[eRovinieta:License] Fingerprint generat: %s... (hw: %s...)",
+            self._fingerprint[:16],
+            self._hardware_fingerprint[:16],
         )
 
         # Restaurează status token din cache (dacă există)
@@ -141,11 +155,35 @@ class LicenseManager:
         await self.async_check_status()
 
         self._loaded = True
+        final_status = self.status
         _LOGGER.debug(
             "[eRovinieta:License] async_load() finalizat — status=%s, is_valid=%s",
-            self.status,
+            final_status,
             self.is_valid,
         )
+
+        # Log-uri explicite pentru fiecare status — vizibile în /logs
+        if final_status == "licensed":
+            key = self._data.get("license_key", "?")
+            _LOGGER.info(
+                "[eRovinieta:License] ✓ Licență ACTIVĂ (cheie: %s)", key
+            )
+        elif final_status == "trial":
+            days = self.trial_days_remaining
+            _LOGGER.info(
+                "[eRovinieta:License] ⏳ Perioadă de evaluare (trial): "
+                "%d zile rămase", days
+            )
+        elif final_status == "expired":
+            _LOGGER.warning(
+                "[eRovinieta:License] ✗ EXPIRAT — perioada de evaluare "
+                "sau licența a expirat. Senzorii nu vor funcționa."
+            )
+        else:
+            _LOGGER.warning(
+                "[eRovinieta:License] ✗ FĂRĂ LICENȚĂ (status=%s) — "
+                "senzorii nu vor funcționa.", final_status
+            )
 
     async def _async_save(self) -> None:
         """Salvează datele de licență."""
@@ -190,10 +228,33 @@ class LicenseManager:
         raw = "|".join(componente) + f"|{_FP_SALT}"
         return hashlib.sha256(raw.encode()).hexdigest()
 
+    def _generate_hardware_fingerprint(self) -> str:
+        """Generează un fingerprint hardware care supraviețuiește ștergerii .storage.
+
+        Bazat DOAR pe machine-id + salt (FĂRĂ HA UUID).
+        Previne abuzul: ștergere .storage/core.uuid → UUID nou → fingerprint
+        nou → trial gratuit nelimitat. hardware_fingerprint rămâne constant.
+        """
+        machine_id = ""
+        try:
+            mid_path = Path("/etc/machine-id")
+            if mid_path.exists():
+                machine_id = mid_path.read_text().strip()
+        except Exception:  # noqa: BLE001
+            pass
+
+        raw = f"hwfp:{machine_id}|{_FP_SALT}"
+        return hashlib.sha256(raw.encode()).hexdigest()
+
     @property
     def fingerprint(self) -> str:
         """Returnează fingerprint-ul hardware."""
         return self._fingerprint
+
+    @property
+    def hardware_fingerprint(self) -> str:
+        """Returnează hardware fingerprint-ul (anti-abuse)."""
+        return self._hardware_fingerprint
 
     # ─── Verificare status la server ───
 
@@ -222,12 +283,16 @@ class LicenseManager:
             LICENSE_API_URL,
         )
 
+        # Resetează flag-ul de retry HMAC (permite un retry pe fiecare check ciclu)
+        self._hmac_retry_done = False
+
         # Trebuie să cerem status de la server
         timestamp = int(time.time())
         payload = {
             "fingerprint": self._fingerprint,
             "timestamp": timestamp,
             "integration": INTEGRATION,
+            "hardware_fingerprint": self._hardware_fingerprint,
         }
         payload["hmac"] = self._compute_request_hmac(payload)
 
@@ -257,6 +322,13 @@ class LicenseManager:
                         )
                         return self._status_token
 
+                    # Captează statusul vechi pentru detecție tranziție
+                    old_status = (
+                        self._status_token.get("status")
+                        if self._status_token
+                        else None
+                    )
+
                     # Salvează noul status token
                     self._status_token = result
                     self._data["status_token"] = result
@@ -283,18 +355,62 @@ class LicenseManager:
 
                     await self._async_save()
 
+                    server_status = result.get("status")
                     _LOGGER.debug(
                         "[eRovinieta:License] Status actualizat de la server — %s "
                         "(valid_until: %s)",
-                        result.get("status"),
+                        server_status,
                         result.get("valid_until"),
                     )
+
+                    # Log explicit de tranziție (vizibil în /logs)
+                    if server_status == "expired":
+                        _LOGGER.warning(
+                            "[eRovinieta:License] Server confirmă: EXPIRAT "
+                            "(trial_days_remaining=0)"
+                        )
+                    elif server_status == "trial":
+                        _LOGGER.info(
+                            "[eRovinieta:License] Server confirmă: TRIAL "
+                            "(zile rămase: %s)",
+                            result.get("trial_days_remaining", "?"),
+                        )
+
+                    # Auto-reload dacă licența a expirat
+                    if (
+                        old_status in ("licensed", "trial")
+                        and server_status in ("expired", "unlicensed")
+                    ):
+                        _LOGGER.warning(
+                            "[eRovinieta:License] Licență expirată "
+                            "(%s → %s) — reload integrare",
+                            old_status,
+                            server_status,
+                        )
+                        await self._async_reload_entries()
+
                     return result
 
-                _LOGGER.warning(
-                    "[eRovinieta:License] răspuns invalid de la /check — %s",
-                    result,
-                )
+                # Gestionare invalid_hmac — client_secret desincronizat
+                if result.get("error") == "invalid_hmac":
+                    if self._data.get("client_secret") and not self._hmac_retry_done:
+                        _LOGGER.warning(
+                            "[eRovinieta:License] HMAC invalid — client_secret "
+                            "desincronizat. Șterg secretul local și reîncerc..."
+                        )
+                        self._data.pop("client_secret", None)
+                        await self._async_save()
+                        self._hmac_retry_done = True
+                        return await self.async_check_status()  # Retry cu fingerprint
+                    _LOGGER.error(
+                        "[eRovinieta:License] HMAC invalid (retry epuizat). "
+                        "Serverul nu recunoaște acest dispozitiv."
+                    )
+                else:
+                    _LOGGER.warning(
+                        "[eRovinieta:License] răspuns invalid de la /check — %s",
+                        result,
+                    )
                 return self._status_token
 
         except aiohttp.ClientError as err:
@@ -880,7 +996,10 @@ class LicenseManager:
         Fallback pe fingerprint dacă client_secret nu e disponibil încă
         (prima rulare, înainte de primul /check).
         """
-        data = {k: v for k, v in payload.items() if k != "hmac"}
+        data = {
+            k: v for k, v in payload.items()
+            if k not in ("hmac", "hardware_fingerprint")
+        }
         msg = json.dumps(data, sort_keys=True).encode()
         # Folosește client_secret dacă e disponibil (v3.1)
         hmac_key = self._data.get("client_secret") or self._fingerprint
