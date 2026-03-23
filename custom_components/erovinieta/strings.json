@@ -1,0 +1,79 @@
+{
+    "title": "CNAIR eRovinieta",
+    "config": {
+        "step": {
+            "user": {
+                "title": "Login to CNAIR eRovinieta Service",
+                "description": "Enter your credentials to connect the integration to your eRovinieta account.",
+                "data": {
+                    "username": "Username (email)",
+                    "password": "Password",
+                    "update_interval": "Update interval",
+                    "istoric_tranzactii": "Transaction history"
+                }
+            },
+            "reauth_confirm": {
+                "title": "Re-authenticate CNAIR eRovinieta",
+                "description": "The password for account **{username}** has expired or changed. Please enter the new password.",
+                "data": {
+                    "password": "New password"
+                }
+            },
+            "reconfigure": {
+                "title": "Reconfigure CNAIR eRovinieta",
+                "description": "Change the password for account **{username}**.",
+                "data": {
+                    "password": "New password"
+                }
+            }
+        },
+        "error": {
+            "authentication_failed": "Authentication failed. Please check your credentials.",
+            "cannot_connect": "Cannot connect to eRovinieta service. Please check your internet connection.",
+            "unknown": "Unexpected error. Check logs for details.",
+            "invalid_update_interval": "Update interval must be between 300 and 86400 seconds."
+        },
+        "abort": {
+            "already_configured": "This account is already configured.",
+            "reauth_successful": "Re-authentication successful.",
+            "reconfigure_successful": "Reconfiguration successful."
+        }
+    },
+    "options": {
+        "error": {
+            "invalid_update_interval": "Update interval must be between 300 and 86400 seconds.",
+            "license_key_empty": "Please enter a license key.",
+            "license_key_invalid": "Invalid license key. Check the format and try again.",
+            "license_already_used": "This license key has already been used on another installation.",
+            "license_key_expired": "This license key has expired.",
+            "license_fingerprint_mismatch": "This license key is bound to a different installation.",
+            "license_network_error": "Cannot connect to the license server. Check your internet connection.",
+            "license_server_error": "License server error. Please try again later."
+        },
+        "step": {
+            "init": {
+                "title": "CNAIR eRovinieta Options",
+                "description": "Choose the category you want to edit.",
+                "menu_options": {
+                    "settings": "Settings",
+                    "licenta": "License"
+                }
+            },
+            "settings": {
+                "title": "CNAIR eRovinieta Settings",
+                "description": "Configure the data update interval and transaction history period.",
+                "data": {
+                    "update_interval": "Update interval",
+                    "istoric_tranzactii": "Transaction history"
+                }
+            },
+            "licenta": {
+                "title": "eRovinieta License",
+                "description": "{license_status}\n\nEnter your license key to activate or renew the integration.",
+                "data": {
+                    "license_key": "License Key"
+                }
+            }
+        }
+    }
+}
