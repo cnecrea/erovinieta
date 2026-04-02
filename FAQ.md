@@ -9,6 +9,8 @@
 - [Setarea „Istoric tranzacții" afectează trecerile de pod?](#setarea-istoric-tranzacții-afectează-trecerile-de-pod)
 - [Cum actualizez opțiunile integrării fără a o reinstala?](#cum-actualizez-opțiunile-integrării-fără-a-o-reinstala)
 - [Ce versiune de Home Assistant este necesară?](#ce-versiune-de-home-assistant-este-necesară)
+- [Ce e licența și de ce am nevoie de ea?](#ce-e-licența-și-de-ce-am-nevoie-de-ea)
+- [Am introdus licența dar senzorii tot arată „Licență necesară". De ce?](#am-introdus-licența-dar-senzorii-tot-arată-licență-necesară-de-ce)
 
 
 ## Cum să adaug integrarea în Home Assistant?
@@ -114,3 +116,34 @@ Modificările se aplică imediat, fără repornirea Home Assistant.
 
 **Răspuns:**
 Integrarea este compatibilă cu **Home Assistant 2025.11** și versiunile ulterioare. Dacă folosești o versiune mai veche, este posibil să întâmpini erori de compatibilitate.
+
+
+## Ce e licența și de ce am nevoie de ea?
+
+[⬆ Înapoi sus](#top)
+
+**Răspuns:**
+Integrarea folosește un sistem de licențiere server-side (v3.3) cu semnături Ed25519 și HMAC-SHA256. Fără o licență validă, integrarea afișează doar senzorul „Licență necesară" și nu creează ceilalți senzori funcționali.
+
+Licența se achiziționează de la: [hubinteligent.org/licenta/erovinieta](https://hubinteligent.org/licenta/erovinieta)
+
+După achiziție, introdu cheia de licență din OptionsFlow:
+1. **Setări** → **Dispozitive și Servicii** → **CNAIR eRovinieta** → **Configurare**
+2. Selectează **Licență**
+3. Completează câmpul „Cheie licență"
+4. Salvează
+
+
+## Am introdus licența dar senzorii tot arată „Licență necesară". De ce?
+
+[⬆ Înapoi sus](#top)
+
+**Răspuns:**
+Câteva cauze posibile:
+
+1. **Licența nu a fost validată** — verifică logurile pentru mesaje cu `LICENSE`
+2. **Serverul de licențe nu este accesibil** — dacă HA nu are acces la internet, validarea eșuează
+3. **Cheie greșită** — verifică că ai copiat cheia corect, fără spații suplimentare
+4. **Restartare necesară** — în rare cazuri, un restart al HA poate rezolva problema
+
+Activează debug logging ([DEBUG.md](DEBUG.md)) și caută mesaje legate de licență.

@@ -85,6 +85,13 @@ Această integrare pentru Home Assistant oferă **monitorizare completă** pentr
   - **📊 Atribute disponibile**:
       - **Sold peaje neexpirate**: Valoarea totală a soldului.
 
+
+### Senzor `Licență`
+  - **🔐 Sistem de licență** — fără licență validă se afișează doar senzorul „Licență necesară"
+      - Integrarea utilizează un sistem de licențiere server-side care validează accesul la toți senzorii.
+      - Cu licență validă: toți senzorii funcționează normal.
+      - Fără licență: numai senzorul „Licență necesară" este disponibil.
+
 ---
 
 ## ⚙️ Configurare
@@ -97,6 +104,7 @@ Această integrare pentru Home Assistant oferă **monitorizare completă** pentr
    - **Interval de actualizare**: Intervalul de actualizare în secunde (implicit: 3600 secunde, minim: 300, maxim: 86400).
    - **Istoric tranzacții**: Selectează câți ani de tranzacții dorești să aduci (1–10, implicit: 2 ani).
 3. Apasă **Salvează** pentru a finaliza configurarea.
+4. **Licență**: Integrarea necesită o licență validă. Poți achiziționa una de la [hubinteligent.org/licenta/erovinieta](https://hubinteligent.org/licenta/erovinieta). Licența se introduce din **OptionsFlow** (Setări > Dispozitive și Servicii > CNAIR eRovinieta > Configurare).
 
 ### 🔧 Modificare opțiuni:
 După instalare, poți modifica intervalul de actualizare și istoricul de tranzacții din **Setări > Dispozitive și Servicii > CNAIR eRovinieta > Configurare**.
@@ -104,6 +112,14 @@ După instalare, poți modifica intervalul de actualizare și istoricul de tranz
 ### Observații:
 - Asigură-te că ai introdus corect datele de autentificare.
 - Setarea „Istoric tranzacții" afectează doar senzorul **Raport tranzacții**. Trecerile de pod sunt gestionate separat de API-ul CNAIR.
+
+---
+
+## ✅ Cerințe
+
+- **Cont CNAIR eRovinieta** — cu nume de utilizator și parolă
+- **Home Assistant** — versiunea 2025.11 sau mai nouă
+- **Licență** validă — [hubinteligent.org/licenta/erovinieta](https://hubinteligent.org/licenta/erovinieta)
 
 ---
 
@@ -210,6 +226,30 @@ entities:
     name: Sold peaje neexpirate
   - entity: sensor.erovinieta_raport_tranzactii_[username]
     name: Raport tranzacții
+  - entity: sensor.erovinieta_[username]_licenta
+    name: Licență
+```
+
+---
+
+## 📁 Structura fișierelor
+
+```
+custom_components/erovinieta/
+├── __init__.py          # Setup/unload integrare (runtime_data, licență)
+├── api.py               # eRovinietzApiClient — autentificare, GET/POST
+├── config_flow.py       # ConfigFlow + OptionsFlow (autentificare, licență)
+├── const.py             # Constante și URL-uri API
+├── coordinator.py       # DataUpdateCoordinator — fetch date
+├── diagnostics.py       # Diagnostics pentru troubleshooting
+├── helpers.py           # Funcții utilitare
+├── license.py           # Manager licență (server-side v3.3, Ed25519, HMAC-SHA256)
+├── manifest.json        # Metadata integrare
+├── sensor.py            # Clase senzori (utilizator, rovinietă, tranzacții, etc.)
+├── strings.json         # Traduceri implicite
+└── translations/
+    ├── en.json          # Traduceri engleză
+    └── ro.json          # Traduceri române
 ```
 
 ---

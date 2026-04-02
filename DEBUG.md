@@ -51,7 +51,19 @@ WARNING  custom_components.erovinieta.coordinator: Date incomplete pentru vehicu
 
 ---
 
-## 3. Probleme frecvente
+## 3. Situații normale (nu sunt erori)
+
+### Licență — heartbeat
+
+```
+[LICENSE] Heartbeat OK. Licența este validă (expiră: 2027-01-15).
+```
+
+**Cauza**: verificarea periodică a licenței cu serverul a reușit. Comportament normal.
+
+---
+
+## 4. Probleme frecvente
 
 ### Autentificarea eșuează
 - Verifică dacă username-ul și parola sunt corecte.
@@ -70,6 +82,20 @@ WARNING  custom_components.erovinieta.coordinator: Date incomplete pentru vehicu
 ### Restanțele treceri pod arată „Nu" deși am trecut podul
 - Senzorul verifică doar trecerile neplătite din **ultimele 24 de ore**.
 - Datele depind de frecvența de actualizare configurată (implicit: 1 oră).
+
+### Licență invalidă
+
+```
+[LICENSE] Licența nu este validă. Motiv: expired / invalid_key / server_unreachable.
+[eRovinieta] Licență invalidă — se creează doar LicentaNecesaraSensor.
+```
+
+**Cauza**: licența a expirat, cheia este greșită, sau serverul de licențe nu este accesibil.
+
+**Rezolvare**:
+1. Verifică cheia de licență în OptionsFlow
+2. Dacă a expirat, reînnoiește de la [hubinteligent.org/licenta/erovinieta](https://hubinteligent.org/licenta/erovinieta)
+3. Dacă serverul nu e accesibil, există un grace period — licența rămâne validă temporar
 
 ---
 
