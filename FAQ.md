@@ -125,7 +125,7 @@ Integrarea este compatibilă cu **Home Assistant 2025.11** și versiunile ulteri
 **Răspuns:**
 Integrarea folosește un sistem de licențiere server-side (v3.3) cu semnături Ed25519 și HMAC-SHA256. Fără o licență validă, integrarea afișează doar senzorul „Licență necesară" și nu creează ceilalți senzori funcționali.
 
-Licența se achiziționează de la: [hubinteligent.org/licenta/erovinieta](https://hubinteligent.org/licenta/erovinieta)
+Licența se achiziționează de la: [hubinteligent.org/donate?ref=erovinieta](https://hubinteligent.org/donate?ref=erovinieta)
 
 După achiziție, introdu cheia de licență din OptionsFlow:
 1. **Setări** → **Dispozitive și Servicii** → **CNAIR eRovinieta** → **Configurare**
