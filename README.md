@@ -104,7 +104,7 @@ Această integrare pentru Home Assistant oferă **monitorizare completă** pentr
    - **Interval de actualizare**: Intervalul de actualizare în secunde (implicit: 3600 secunde, minim: 300, maxim: 86400).
    - **Istoric tranzacții**: Selectează câți ani de tranzacții dorești să aduci (1–10, implicit: 2 ani).
 3. Apasă **Salvează** pentru a finaliza configurarea.
-4. **Licență**: Integrarea necesită o licență validă. Poți achiziționa una de la [hubinteligent.org/licenta/erovinieta](https://hubinteligent.org/licenta/erovinieta). Licența se introduce din **OptionsFlow** (Setări > Dispozitive și Servicii > CNAIR eRovinieta > Configurare).
+4. **Licență**: Integrarea necesită o licență validă. Poți achiziționa una de la [hubinteligent.org/donate?ref=erovinieta](https://hubinteligent.org/donate?ref=erovinieta). Licența se introduce din **OptionsFlow** (Setări > Dispozitive și Servicii > CNAIR eRovinieta > Configurare).
 
 ### 🔧 Modificare opțiuni:
 După instalare, poți modifica intervalul de actualizare și istoricul de tranzacții din **Setări > Dispozitive și Servicii > CNAIR eRovinieta > Configurare**.
