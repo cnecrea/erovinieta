@@ -119,7 +119,7 @@ După instalare, poți modifica intervalul de actualizare și istoricul de tranz
 
 - **Cont CNAIR eRovinieta** — cu nume de utilizator și parolă
 - **Home Assistant** — versiunea 2025.11 sau mai nouă
-- **Licență** validă — [hubinteligent.org/licenta/erovinieta](https://hubinteligent.org/licenta/erovinieta)
+- **Licență** validă — [hubinteligent.org/donate?ref=erovinieta](https://hubinteligent.org/donate?ref=erovinieta)
 
 ---
 
