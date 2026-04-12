@@ -241,9 +241,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
 
     # ── Setup API + Coordinator (logica originală) ──
-    session = aiohttp.ClientSession(
-        timeout=aiohttp.ClientTimeout(total=30)
-    )
+    session = async_get_clientsession(hass)
     api = ErovinietaAPI(
         session, entry.data[CONF_USERNAME], entry.data[CONF_PASSWORD]
     )
@@ -252,12 +250,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     try:
         await api.authenticate()
     except ErovinietaAuthError as err:
-        await api.close()
         raise ConfigEntryAuthFailed(
             f"Autentificare eșuată: {err}"
         ) from err
     except (ErovinietaConnectionError, Exception) as err:
-        await api.close()
         raise ConfigEntryNotReady(
             f"Serviciul eRovinieta nu este disponibil: {err}"
         ) from err
@@ -274,7 +270,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     try:
         await coordinator.async_config_entry_first_refresh()
     except Exception:
-        await api.close()
         raise
 
     # Stocăm coordinatorul
@@ -325,7 +320,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         coordinator: ErovinietaCoordinator = hass.data[DOMAIN].pop(
             entry.entry_id
         )
-        await coordinator.api.close()
+        # Sesiunea HA (async_get_clientsession) se gestionează automat — nu o închidem
 
         # Verifică dacă mai sunt entry-uri active
         entry_ids_ramase = {

@@ -19,6 +19,7 @@ from .const import (
     DEFAULT_UPDATE_INTERVAL,
     DOMAIN,
     ISTORIC_TRANZACTII_DEFAULT,
+    LICENSE_DATA_KEY,
 )
 from .exceptions import ErovinietaAuthError, ErovinietaConnectionError
 from .helpers import safe_get
@@ -55,6 +56,12 @@ class ErovinietaCoordinator(DataUpdateCoordinator[dict]):
         (declanșează reauth flow) și cele de conexiune în UpdateFailed
         (declanșează retry automat).
         """
+        # Verificare licență — nu fetchuim date dacă licența/trial nu e validă
+        license_mgr = self.hass.data.get(DOMAIN, {}).get(LICENSE_DATA_KEY)
+        if license_mgr and not license_mgr.is_valid:
+            _LOGGER.debug("[eRovinieta] Licență invalidă — se omit apelurile API")
+            return self.data or {}
+
         try:
             return await self._fetch_all_data()
         except ErovinietaAuthError as err:
