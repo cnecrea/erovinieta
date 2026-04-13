@@ -75,5 +75,15 @@
                 }
             }
         }
+    },
+    "issues": {
+        "trial_expired": {
+            "title": "Trial expired — eRovinieta",
+            "description": "The free trial period has ended.\n\nSensors are disabled until a license is obtained.\n\n[Get a license now]({learn_more_url})"
+        },
+        "license_expired": {
+            "title": "License expired — eRovinieta",
+            "description": "The license for this integration has expired.\n\nSensors are disabled until the license is renewed.\n\n[Renew license]({learn_more_url})"
+        }
     }
 }
