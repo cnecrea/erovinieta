@@ -1,3 +1,19 @@
+> [!IMPORTANT]
+> ##  CNAIR eRovinieta a fost înlocuită de CNAIR eToll
+>
+> Integrarea **CNAIR eRovinieta** este înlocuită de noua integrare **CNAIR eToll**, dezvoltată pentru platforma actuală CNAIR.
+>
+>  **Repository-ul noii integrări:** [CNAIR eToll](https://github.com/cnecrea/tollro)
+>
+> Pentru instalări noi, recomand utilizarea integrării **CNAIR eToll**.
+>
+> Acest repository este păstrat pentru documentație și referință privind integrarea anterioară.
+>
+> 
+
+---
+
+
 # CNAIR eRovinieta — Integrare Home Assistant
 
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2025.11%2B-41BDF5?logo=homeassistant&logoColor=white)](https://www.home-assistant.io/)
